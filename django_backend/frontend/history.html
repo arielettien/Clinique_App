@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historique — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { font-size: 1.35rem; margin: 4px 0 4px 0; }
+  h2.section-title { font-size: 1.05rem; margin: 24px 0 12px 0; }
+  .submission-entry { margin-bottom: 14px; }
+  .submission-entry .header { font-size: 0.9rem; margin-bottom: 10px; display: flex; justify-content: space-between; }
+  .submission-entry .header .date { color: var(--ink-faint); font-weight: normal; }
+  .submission-entry table { width: 100%; border-collapse: collapse; }
+  .submission-entry td { padding: 5px 0; font-size: 0.88rem; }
+  .submission-entry td.label { color: var(--ink-muted); width: 55%; font-family: var(--font-mono); font-size: 0.82rem; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; margin-left: 8px; }
+  .badge-active { background: var(--sev-low-bg, #DCFCE7); color: var(--sev-low-fg, #15803D); }
+  .badge-closed { background: var(--surface-muted); color: var(--ink-muted); }
+  .badge-lost { background: #F3F4F6; color: #374151; }
+  .case-list-item {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px;
+  }
+  .case-list-item .left { font-size: 0.9rem; }
+  .case-list-item .meta { color: var(--ink-muted); font-size: 0.82rem; margin-top: 2px; }
+  .error-msg { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); font-size: 0.9rem; }
+
+  /* --- Fenêtre "Imprimer" --- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface); border-radius: var(--radius-lg); padding: var(--space-5);
+    width: 100%; max-width: 440px; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-md);
+  }
+  .modal-box h3 { margin-top: 0; }
+  .print-option { display: block; padding: 10px 4px; font-size: 0.9rem; cursor: pointer; }
+  .print-option input { margin-right: 8px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+  /* --- Contenu imprimable : invisible à l'écran, seul visible à l'impression --- */
+  #print-content { display: none; }
+  @media print {
+    /* html/body ont "height:100%" pour l'affichage à l'écran (voir style.css) —
+       à l'impression, ça force une page pleine même sans contenu et fait
+       apparaître une seconde page vide après le vrai contenu. On neutralise
+       ça uniquement pour l'impression. */
+    html, body { height: auto !important; margin: 0 !important; }
+    @page { margin: 12mm; }
+    .app-shell { display: none !important; }
+    #print-content { display: block !important; font-family: Arial, sans-serif; color: #000; }
+    #print-content > *:last-child { margin-bottom: 0 !important; }
+    #print-content h1 { font-size: 1.3rem; margin-bottom: 2px; }
+    #print-content h2 { font-size: 1.05rem; margin: 20px 0 8px 0; border-bottom: 1px solid #999; padding-bottom: 4px; }
+    #print-content table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    #print-content td { padding: 4px 6px; font-size: 0.85rem; border-bottom: 1px solid #ddd; vertical-align: top; }
+    #print-content td.label { width: 35%; color: #555; }
+    #print-content .print-entry { margin-bottom: 14px; page-break-inside: avoid; }
+    #print-content .entry-header { font-weight: bold; font-size: 0.9rem; margin-bottom: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb"><a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="/">…</a> / <span id="breadcrumb-module"></span>Historique</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <h1 style="margin:0;">📖 Historique du patient</h1>
+      <button type="button" class="btn btn-ghost btn-sm" id="print-btn">🖨️ Imprimer</button>
+    </div>
+    <p id="patient-name" style="color:var(--ink-muted);"></p>
+    <div id="patient-actions" style="margin-bottom:10px;"></div>
+
+    <h2 class="section-title">📋 Dossiers de suivi</h2>
+    <div id="case-list-box"></div>
+
+    <h2 class="section-title">📝 Toutes les soumissions (Enquête et Suivi)</h2>
+    <div id="submissions-container"></div>
+    <div class="empty-state hidden" id="empty-message"><span class="empty-icon">📖</span>Aucune consultation enregistrée pour ce patient.</div>
+
+  </main>
+</div>
+
+<div class="modal-overlay" id="print-modal-overlay">
+  <div class="modal-box">
+    <h3>Que veux-tu imprimer ?</h3>
+    <label class="print-option"><input type="radio" name="print-mode" value="patient" checked> Informations patient seules</label>
+    <label class="print-option"><input type="radio" name="print-mode" value="patient_survey"> Informations patient + fiches d'Enquête</label>
+    <label class="print-option"><input type="radio" name="print-mode" value="patient_followup"> Informations patient + fiches de Suivi</label>
+    <label class="print-option"><input type="radio" name="print-mode" value="followup_only"> Fiches de Suivi seules</label>
+
+    <div class="field hidden" id="print-date-range-wrap" style="margin-top:12px;">
+      <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:6px; color:var(--ink-muted);">Période des fiches de suivi à inclure</label>
+      <div style="display:flex; gap:8px;">
+        <input type="date" id="print-date-start">
+        <input type="date" id="print-date-end">
+      </div>
+      <div style="font-size:0.78rem; color:var(--ink-faint); margin-top:4px;">Laisse vide pour inclure toutes les fiches, sans limite de date.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="print-modal-cancel-btn">Annuler</button>
+      <button type="button" class="btn btn-primary" id="print-modal-confirm-btn">Imprimer</button>
+    </div>
+  </div>
+</div>
+
+<div id="print-content"></div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const patientId = params.get('patient_id');
+const cameFromFormId = params.get('form_id');
+
+// Mémorisés au chargement pour être réutilisés par la fenêtre "Imprimer"
+// (sinon il faudrait tout re-télécharger au moment de l'impression).
+let currentPatientData = null;
+let currentSubmissionsData = [];
+
+function escapeHtmlHist(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+(async () => {
+  if (!patientId) {
+    document.getElementById('submissions-container').innerHTML = '<p>Aucun patient sélectionné.</p>';
+    return;
+  }
+
+  const user = await initAppShell(null);
+  if (!user) return;
+
+  const patientRes = await fetch(`/api/patients/${patientId}`, { credentials: 'same-origin' });
+  if (!patientRes.ok) {
+    document.getElementById('patient-name').textContent = 'Patient introuvable.';
+    return;
+  }
+  const patient = await patientRes.json();
+  currentPatientData = patient;
+  document.getElementById('patient-name').textContent = `Patient : ${patient.first_name} ${patient.last_name}${patient.anonymous_code ? ` · Code anonyme : ${patient.anonymous_code}` : ''}`;
+  document.getElementById('breadcrumb-project').href = `/project_hub.html?project_id=${patient.project_id}`;
+
+  const projRes = await fetch(`/api/projects/${patient.project_id}`, { credentials: 'same-origin' });
+  document.getElementById('breadcrumb-project').textContent = projRes.ok ? (await projRes.json()).name : 'Projet';
+
+  // Si on arrive ici depuis le lien "Voir" de l'onglet DONNÉES d'Enquête (qui
+  // transmet form_id dans l'URL), on ajoute un maillon direct vers cet écran
+  // précis — onglet DONNÉES + ce même formulaire déjà sélectionné — pour ne
+  // pas forcer un aller-retour par la page du projet puis re-choisir le
+  // module et le formulaire à chaque fois.
+  if (cameFromFormId) {
+    try {
+      const formRes = await fetch(`/api/forms/${cameFromFormId}`, { credentials: 'same-origin' });
+      if (formRes.ok) {
+        const form = await formRes.json();
+        if (form.form_type === 'survey') {
+          document.getElementById('breadcrumb-module').innerHTML =
+            `<a href="/survey.html?project_id=${patient.project_id}&tab=data&form_id=${cameFromFormId}">Enquête</a> / `;
+        }
+      }
+    } catch (e) { /* pas grave — le fil d'Ariane reste simple */ }
+  }
+
+  await loadCaseTransferBox(patient);
+  await renderPatientActions(patient);
+
+  const subsRes = await fetch(`/api/patients/${patientId}/submissions`, { credentials: 'same-origin' });
+  if (subsRes.status === 401) { window.location.href = '/login.html'; return; }
+  const allSubmissions = await subsRes.json();
+  currentSubmissionsData = allSubmissions;
+
+  // Cette section montre TOUTES les soumissions du patient (Enquête et
+  // Suivi confondues) — vue volontairement complète, pas seulement l'Enquête.
+  const submissions = allSubmissions;
+
+  const container = document.getElementById('submissions-container');
+  if (submissions.length === 0) {
+    document.getElementById('empty-message').classList.remove('hidden');
+    return;
+  }
+
+  submissions.forEach(sub => {
+    const div = document.createElement('div');
+    div.className = 'card submission-entry';
+    // Date de l'événement (peut être antidatée volontairement) + heure RÉELLE
+    // d'enregistrement (created_at) — collected_at n'a jamais d'heure
+    // réellement saisie (toujours minuit par défaut), afficher son heure
+    // telle quelle aurait été trompeur.
+    const datePart = new Date(sub.collected_at).toLocaleDateString('fr-FR');
+    const timePart = sub.created_at ? new Date(sub.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+    const dateStr = timePart ? `${datePart} à ${timePart}` : datePart;
+
+    let rows = '';
+    const fieldTypes = sub.field_types || {};
+    for (const [key, value] of Object.entries(sub.responses)) {
+      const colType = fieldTypes[key];
+      let display;
+      if (value === null || value === undefined || value === '') {
+        display = '—';
+      } else if (colType === 'signature') {
+        display = `<img src="/api/media/${value}" alt="Signature" style="max-height:70px;background:#fff;border:1px solid var(--border);border-radius:6px;">`;
+      } else if (['image', 'audio', 'video', 'file'].includes(colType)) {
+        const url = `/api/media/${value}`;
+        if (colType === 'image') display = `<a href="${url}" target="_blank"><img src="${url}" alt="Photo" style="max-width:70px;max-height:70px;border-radius:6px;vertical-align:middle;"></a>`;
+        else if (colType === 'audio') display = `<audio controls src="${url}" style="max-width:220px;height:32px;"></audio>`;
+        else if (colType === 'video') display = `<a href="${url}" target="_blank">${window.icon ? icon('video') : ''} Voir la vidéo</a>`;
+        else display = `<a href="${url}" target="_blank">${window.icon ? icon('paperclip') : ''} Voir le fichier</a>`;
+      } else {
+        display = escapeHtmlHist(value);
+      }
+      rows += `<tr><td class="label">${escapeHtmlHist(key)}</td><td>${display}</td></tr>`;
+    }
+
+    div.innerHTML = `
+      <div class="header"><strong>${escapeHtmlHist(sub.form_name)}</strong><span class="date">${dateStr}</span></div>
+      <table>${rows}</table>
+    `;
+    container.appendChild(div);
+  });
+})();
+
+function formatDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('fr-FR');
+}
+
+/* ── Impression ── */
+
+// Âge en mois tant que l'enfant a moins de 5 ans (usage nutrition : "0 ans"
+// n'est d'aucune utilité pour un bébé de quelques mois, l'âge en mois est ce
+// qui compte réellement en dépistage nutritionnel jusqu'à 5 ans).
+function computeAgeHist(dob) {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  const now = new Date();
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years < 5) return `${years * 12 + months} mois`;
+  return `${years} ans`;
+}
+
+function renderPrintResponsesTable(responses, fieldTypes) {
+  let rows = '';
+  const types = fieldTypes || {};
+  for (const [key, value] of Object.entries(responses || {})) {
+    const colType = types[key];
+    let display;
+    if (value === null || value === undefined || value === '') display = '—';
+    // La signature est une exception volontaire : contrairement aux autres
+    // fichiers joints, c'est souvent la raison même d'imprimer le document
+    // (preuve de consentement/présence) — elle s'affiche donc en clair.
+    else if (colType === 'signature') display = `<img src="/api/media/${value}" alt="Signature" style="max-height:70px;">`;
+    else if (['image', 'audio', 'video', 'file'].includes(colType)) display = '(fichier joint — non imprimé)';
+    else display = escapeHtmlHist(String(value));
+    rows += `<tr><td class="label">${escapeHtmlHist(key)}</td><td>${display}</td></tr>`;
+  }
+  return `<table>${rows}</table>`;
+}
+
+function renderPrintEntries(subs) {
+  if (subs.length === 0) return '<p>Aucune fiche pour cette sélection.</p>';
+  return subs.map(s => `
+    <div class="print-entry">
+      <div class="entry-header">${escapeHtmlHist(s.form_name)} — ${new Date(s.collected_at).toLocaleDateString('fr-FR')}</div>
+      ${renderPrintResponsesTable(s.responses, s.field_types)}
+    </div>
+  `).join('');
+}
+
+function buildPrintHtml(mode, dateStart, dateEnd) {
+  const p = currentPatientData;
+  const age = computeAgeHist(p.date_of_birth);
+
+  const includePatientInfo = mode !== 'followup_only';
+  const includeSurvey = mode === 'patient_survey';
+  const includeFollowup = mode === 'patient_followup' || mode === 'followup_only';
+
+  let html = `<h1>Historique patient</h1><p>Imprimé le ${new Date().toLocaleDateString('fr-FR')}</p>`;
+
+  if (includePatientInfo) {
+    html += `
+      <h2>Informations patient</h2>
+      <table>
+        <tr><td class="label">Nom</td><td>${escapeHtmlHist(p.last_name)}</td></tr>
+        <tr><td class="label">Prénom</td><td>${escapeHtmlHist(p.first_name)}</td></tr>
+        <tr><td class="label">Code anonyme</td><td>${p.anonymous_code || '—'}</td></tr>
+        <tr><td class="label">Sexe</td><td>${p.sex || '—'}</td></tr>
+        <tr><td class="label">Date de naissance</td><td>${formatDate(p.date_of_birth)}${age !== null ? ` (Âge : ${age})` : ''}</td></tr>
+        <tr><td class="label">Téléphone</td><td>${escapeHtmlHist(p.phone || '—')}</td></tr>
+      </table>`;
+  }
+
+  if (includeSurvey) {
+    html += `<h2>Fiches d'Enquête</h2>${renderPrintEntries(currentSubmissionsData.filter(s => s.form_type === 'survey'))}`;
+  }
+
+  if (includeFollowup) {
+    let followupSubs = currentSubmissionsData.filter(s => s.form_type !== 'survey');
+    if (dateStart) followupSubs = followupSubs.filter(s => new Date(s.collected_at) >= new Date(dateStart));
+    if (dateEnd) followupSubs = followupSubs.filter(s => new Date(s.collected_at) <= new Date(dateEnd + 'T23:59:59'));
+    const periodLabel = (dateStart || dateEnd) ? ` (du ${dateStart ? formatDate(dateStart) : '…'} au ${dateEnd ? formatDate(dateEnd) : '…'})` : '';
+    html += `<h2>Fiches de Suivi${periodLabel}</h2>${renderPrintEntries(followupSubs)}`;
+  }
+
+  return html;
+}
+
+document.getElementById('print-btn').addEventListener('click', () => {
+  document.getElementById('print-modal-overlay').classList.add('open');
+});
+document.getElementById('print-modal-cancel-btn').addEventListener('click', () => {
+  document.getElementById('print-modal-overlay').classList.remove('open');
+});
+document.getElementById('print-modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'print-modal-overlay') document.getElementById('print-modal-overlay').classList.remove('open');
+});
+document.querySelectorAll('input[name="print-mode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    const needsDates = e.target.value === 'patient_followup' || e.target.value === 'followup_only';
+    document.getElementById('print-date-range-wrap').classList.toggle('hidden', !needsDates);
+  });
+});
+document.getElementById('print-modal-confirm-btn').addEventListener('click', () => {
+  const mode = document.querySelector('input[name="print-mode"]:checked').value;
+  const dateStart = document.getElementById('print-date-start').value;
+  const dateEnd = document.getElementById('print-date-end').value;
+  document.getElementById('print-content').innerHTML = buildPrintHtml(mode, dateStart, dateEnd);
+  document.getElementById('print-modal-overlay').classList.remove('open');
+  window.print();
+});
+function statusBadge(status) {
+  if (status === 'active') return '<span class="badge badge-active">Actif</span>';
+  if (status === 'closed') return '<span class="badge badge-closed">Clôturé</span>';
+  return '<span class="badge badge-lost">Perdu de vue</span>';
+}
+
+async function loadCaseTransferBox(patient) {
+  const box = document.getElementById('case-list-box');
+  const res = await fetch(`/api/patients/${patientId}/cases`, { credentials: 'same-origin' });
+  const cases = res.ok ? await res.json() : [];
+
+  let html = '';
+  if (cases.length === 0) {
+    html += '<p style="color:var(--ink-muted); font-size:0.9rem;">Aucun dossier de suivi pour ce patient pour l\'instant.</p>';
+  } else {
+    for (const c of cases) {
+      html += `<div class="case-list-item">
+        <div class="left">
+          <a href="/case_detail.html?case_id=${c.id}"><strong>${c.case_number}</strong></a>${statusBadge(c.status)}
+          <div class="meta">Inscrit le ${formatDate(c.enrolled_at)}${c.closed_at ? ' · Clôturé le ' + formatDate(c.closed_at) + (c.closed_reason ? ' (' + escapeHtmlHist(c.closed_reason) + ')' : '') : ''}</div>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="/case_detail.html?case_id=${c.id}">Ouvrir →</a>
+      </div>`;
+    }
+  }
+  html += `
+    <div class="field" style="margin-top:12px;">
+      <label style="display:block; font-size:0.82rem; color:var(--ink-muted); margin-bottom:4px;">Date réelle d'inscription (optionnel, laisser vide = aujourd'hui)</label>
+      <input type="date" id="new-case-enrolled-date" style="max-width:220px;">
+    </div>
+    <button class="btn btn-secondary btn-sm" id="btn-transfer-to-followup" style="margin-top:10px;">📋 Créer un nouveau dossier de suivi</button>
+    <p id="case-create-error" class="error-msg hidden" style="margin-top:10px;"></p>`;
+  box.innerHTML = html;
+
+  document.getElementById('btn-transfer-to-followup').addEventListener('click', () => createCase(patient, false));
+}
+
+async function renderPatientActions(patient) {
+  const box = document.getElementById('patient-actions');
+  const [casesRes, subsRes] = await Promise.all([
+    fetch(`/api/patients/${patientId}/cases`, { credentials: 'same-origin' }),
+    fetch(`/api/patients/${patientId}/submissions`, { credentials: 'same-origin' }),
+  ]);
+  const cases = casesRes.ok ? await casesRes.json() : [];
+  const subs = subsRes.ok ? (await subsRes.json()) : [];
+  if (cases.length === 0 && subs.length === 0) {
+    box.innerHTML = `<button class="btn btn-ghost btn-sm" id="btn-delete-patient" style="color:#B91C1C;">🗑 Supprimer ce patient (aucune donnée rattachée)</button>`;
+    document.getElementById('btn-delete-patient').addEventListener('click', async () => {
+      if (!confirm('Supprimer définitivement cette fiche patient ? Cette action est irréversible.')) return;
+      const res = await fetch(`/api/patients/${patientId}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (res.ok) {
+        window.location.href = `/project_hub.html?project_id=${patient.project_id}`;
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(extractApiError(data, "Impossible de supprimer ce patient."));
+      }
+    });
+  } else {
+    box.innerHTML = `<p style="font-size:0.82rem; color:var(--ink-muted);">Suppression indisponible : ${subs.length} soumission(s) et ${cases.length} dossier(s) de suivi rattachés.</p>`;
+  }
+}
+
+async function createCase(patient, force) {
+  const errEl = document.getElementById('case-create-error');
+  errEl.classList.add('hidden');
+  const btn = document.getElementById('btn-transfer-to-followup');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const qs = force ? '?force=true' : '';
+  const payload = { project_id: patient.project_id, patient_id: patientId };
+  const enrolledDate = document.getElementById('new-case-enrolled-date').value;
+  if (enrolledDate) payload.enrolled_at = enrolledDate;
+  const res = await fetch('/api/cases' + qs, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(payload)
+  });
+  if (res.status === 401) { window.location.href = '/login.html'; return; }
+  if (res.status === 409) {
+    btn.disabled = false;
+    const data = await res.json().catch(() => ({}));
+    const msg = (data.detail && data.detail.msg) ? data.detail.msg : "Ce patient a déjà un dossier actif.";
+    if (confirm(msg + " Créer quand même un second dossier ?")) {
+      await createCase(patient, true);
+    }
+    return;
+  }
+  if (!res.ok) {
+    btn.disabled = false;
+    const data = await res.json().catch(() => ({}));
+    errEl.textContent = extractApiError(data, "Impossible de créer le dossier de suivi.");
+    errEl.classList.remove('hidden');
+    return;
+  }
+  const c = await res.json();
+  window.location.href = `/case_detail.html?case_id=${c.id}`;
+}
+</script>
+
+</body>
+</html>

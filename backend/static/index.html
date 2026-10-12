@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clinique — Projets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+  .page-header h1 { font-size: 1.6rem; margin: 0; }
+
+  .project-search-wrap { position: relative; margin: 0 0 34px 0; width: 100%; }
+  .project-search-wrap svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--ink-faint); pointer-events: none; }
+  #project-search-input { width: 100%; padding: 12px 14px 12px 40px; font-size: 0.95rem; }
+
+  /* --- Vignettes projet : image de couverture carrée, nom au-dessus,
+     description (+ crayon pour modifier) en dessous --- */
+  .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px; }
+  .project-tile-name {
+    font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; margin-bottom: 8px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .project-cover {
+    display: block; position: relative; aspect-ratio: 1 / 1; border-radius: var(--radius-md);
+    overflow: hidden; background: var(--surface-muted); box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+  }
+  .project-cover:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .project-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .project-cover .cover-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .project-caption-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; width: 100%; }
+  .project-info-btn {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; text-align: left;
+    background: none; border: none; cursor: pointer; padding: 0; font-family: var(--font-body);
+    font-size: 0.83rem; color: var(--ink-muted);
+  }
+  .project-info-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .project-info-btn:hover { color: var(--primary-dark); }
+  .project-edit-btn {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .project-edit-btn svg { width: 13px; height: 13px; }
+  .project-edit-btn:hover { background: var(--surface-muted); color: var(--ink); border-color: var(--border-strong); }
+
+  /* --- Fenêtre "Infos" (lecture seule) --- */
+  .project-info-list { margin: 16px 0 0 0; }
+  .project-info-list .info-row { margin-bottom: 14px; }
+  .project-info-list dt { font-size: 0.75rem; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .project-info-list dd { margin: 0; font-size: 0.92rem; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+  .project-info-list dd.is-empty { color: var(--ink-faint); font-style: italic; }
+
+  /* --- Fenêtre modale de création/modification de projet --- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface); border-radius: var(--radius-lg); padding: var(--space-5);
+    width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-md);
+  }
+  .modal-box h3 { margin-top: 0; }
+  .modal-box .field { margin-bottom: 14px; }
+  .modal-box .field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--ink-muted); }
+  .modal-box .field input { width: 100%; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+  .cover-upload-wrap { display: flex; align-items: center; gap: 14px; }
+  .cover-preview {
+    width: 84px; height: 84px; border-radius: var(--radius-md); background: var(--surface-muted);
+    display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;
+    border: 1px dashed var(--border-strong);
+  }
+  .cover-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .cover-preview svg { width: 28px; height: 28px; color: var(--ink-faint); }
+  #cover-upload-status { font-size: 0.78rem; color: var(--ink-faint); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="page-header">
+      <h1>📁 Mes projets</h1>
+      <button type="button" id="new-project-btn" class="btn btn-primary">+ Créer le projet</button>
+    </div>
+
+    <div class="project-search-wrap" id="project-search-wrap">
+      <span data-icon="search"></span>
+      <input type="text" id="project-search-input" placeholder="Rechercher un projet par nom...">
+    </div>
+
+    <div class="project-grid" id="project-grid"></div>
+    <div class="empty-state hidden" id="empty-message">
+      <span class="empty-icon">📁</span>
+      Aucun projet pour l'instant.<br>Crée-en un avec le bouton ci-dessus (ex : "Nutrition", "Diabète", "Cancer"...).
+    </div>
+    <div class="empty-state hidden" id="no-search-results">
+      <span class="empty-icon">🔍</span>
+      Aucun projet ne correspond à cette recherche.
+    </div>
+
+  </main>
+</div>
+
+<div class="modal-overlay" id="project-modal-overlay">
+  <div class="modal-box">
+    <h3 id="project-modal-title">Nouveau projet</h3>
+    <form id="project-modal-form">
+      <div class="field">
+        <label>Image de couverture</label>
+        <div class="cover-upload-wrap">
+          <div class="cover-preview" id="cover-preview"><span data-icon="camera"></span></div>
+          <div>
+            <input type="file" accept="image/*" id="cover-file-input">
+            <div id="cover-upload-status"></div>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Titre du projet *</label>
+        <input type="text" id="modal-name-input" required placeholder="ex : Suivi Diabète">
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <input type="text" id="modal-description-input" placeholder="Description courte (optionnel)">
+      </div>
+      <div class="field">
+        <label>Date de création du projet</label>
+        <input type="date" id="modal-start-date-input">
+      </div>
+      <div class="field">
+        <label>ONG de développement</label>
+        <input type="text" id="modal-ngo-input" placeholder="optionnel">
+      </div>
+      <div class="field">
+        <label>Bailleur principal</label>
+        <input type="text" id="modal-donor-input" placeholder="optionnel">
+      </div>
+      <p id="project-modal-error" class="alert-banner severity-critical hidden"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="project-modal-cancel-btn">Annuler</button>
+        <button type="submit" class="btn btn-primary" id="project-modal-submit-btn">Créer le projet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="project-info-modal-overlay">
+  <div class="modal-box">
+    <h3 id="info-modal-name"></h3>
+    <dl class="project-info-list">
+      <div class="info-row">
+        <dt>Description</dt>
+        <dd id="info-modal-description"></dd>
+      </div>
+      <div class="info-row">
+        <dt>Date de création du projet</dt>
+        <dd id="info-modal-start-date"></dd>
+      </div>
+      <div class="info-row">
+        <dt>ONG de développement</dt>
+        <dd id="info-modal-ngo"></dd>
+      </div>
+      <div class="info-row">
+        <dt>Bailleur principal</dt>
+        <dd id="info-modal-donor"></dd>
+      </div>
+    </dl>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="project-info-close-btn">Fermer</button>
+      <button type="button" class="btn btn-primary" id="project-info-edit-btn">Modifier</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+function escapeHtmlIdx(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Chargé une seule fois, puis filtré entièrement en mémoire à chaque frappe
+// dans la recherche — pas de nouvel appel réseau par lettre tapée, important
+// dès que le nombre de projets devient grand (des centaines).
+let allProjects = [];
+
+async function loadProjects() {
+  const res = await fetch('/api/projects', { credentials: 'same-origin' });
+  allProjects = await res.json();
+  renderProjectGrid(document.getElementById('project-search-input').value);
+}
+
+function renderProjectGrid(filterText) {
+  const grid = document.getElementById('project-grid');
+  const emptyMsg = document.getElementById('empty-message');
+  const noResultsMsg = document.getElementById('no-search-results');
+  grid.innerHTML = '';
+
+  if (allProjects.length === 0) {
+    emptyMsg.classList.remove('hidden');
+    noResultsMsg.classList.add('hidden');
+    return;
+  }
+  emptyMsg.classList.add('hidden');
+
+  const needle = (filterText || '').trim().toLowerCase();
+  const filtered = needle
+    ? allProjects.filter(p => p.name.toLowerCase().includes(needle))
+    : allProjects;
+
+  noResultsMsg.classList.toggle('hidden', filtered.length > 0);
+
+  for (const p of filtered) {
+    const tile = document.createElement('div');
+    tile.className = 'project-tile';
+    const coverInner = p.cover_image_id
+      ? `<img src="/api/media/${p.cover_image_id}" alt="">`
+      : `<div class="cover-fallback" style="background:${projectColor(p.id)};">${window.icon ? icon('folder', { size: 44 }) : '📁'}</div>`;
+    tile.innerHTML = `
+      <div class="project-tile-name">${escapeHtmlIdx(p.name)}</div>
+      <a class="project-cover" href="/project_hub.html?project_id=${p.id}">${coverInner}</a>
+      <div class="project-caption-row">
+        <button type="button" class="project-info-btn">${window.icon ? icon('info') : 'ℹ️'} Infos</button>
+        <button type="button" class="project-edit-btn" title="Modifier ce projet">${window.icon ? icon('pencil') : '✎'}</button>
+      </div>
+    `;
+    tile.querySelector('.project-info-btn').addEventListener('click', () => openProjectInfoModal(p));
+    tile.querySelector('.project-edit-btn').addEventListener('click', () => openProjectModal(p));
+    grid.appendChild(tile);
+  }
+}
+
+document.getElementById('project-search-input').addEventListener('input', (e) => {
+  renderProjectGrid(e.target.value);
+});
+
+/* ── Fenêtre "Infos" (lecture seule) ── */
+
+function formatDateFr(isoDate) {
+  if (!isoDate) return null;
+  const [y, m, d] = isoDate.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function setInfoField(id, value) {
+  const el = document.getElementById(id);
+  if (value) { el.textContent = value; el.classList.remove('is-empty'); }
+  else { el.textContent = 'Non renseigné'; el.classList.add('is-empty'); }
+}
+
+function openProjectInfoModal(project) {
+  document.getElementById('info-modal-name').textContent = project.name;
+  setInfoField('info-modal-description', project.description && project.description.trim() ? project.description : null);
+  setInfoField('info-modal-start-date', formatDateFr(project.start_date));
+  setInfoField('info-modal-ngo', project.ngo_name);
+  setInfoField('info-modal-donor', project.main_donor);
+
+  document.getElementById('project-info-edit-btn').onclick = () => {
+    closeProjectInfoModal();
+    openProjectModal(project);
+  };
+
+  document.getElementById('project-info-modal-overlay').classList.add('open');
+}
+
+function closeProjectInfoModal() {
+  document.getElementById('project-info-modal-overlay').classList.remove('open');
+}
+
+document.getElementById('project-info-close-btn').addEventListener('click', closeProjectInfoModal);
+document.getElementById('project-info-modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'project-info-modal-overlay') closeProjectInfoModal();
+});
+
+/* ── Fenêtre modale de création/modification ── */
+
+let editingProjectId = null;   // null = mode création, sinon id du projet modifié
+let pendingCoverImageId = null; // id Media déjà uploadé, à envoyer avec le projet
+
+function openProjectModal(project) {
+  const form = document.getElementById('project-modal-form');
+  form.reset();
+  document.getElementById('project-modal-error').classList.add('hidden');
+  const preview = document.getElementById('cover-preview');
+  document.getElementById('cover-upload-status').textContent = '';
+
+  if (project) {
+    editingProjectId = project.id;
+    pendingCoverImageId = project.cover_image_id || null;
+    document.getElementById('project-modal-title').textContent = 'Modifier le projet';
+    document.getElementById('project-modal-submit-btn').textContent = 'Enregistrer';
+    document.getElementById('modal-name-input').value = project.name || '';
+    document.getElementById('modal-description-input').value = project.description || '';
+    document.getElementById('modal-start-date-input').value = project.start_date || '';
+    document.getElementById('modal-ngo-input').value = project.ngo_name || '';
+    document.getElementById('modal-donor-input').value = project.main_donor || '';
+    preview.innerHTML = project.cover_image_id
+      ? `<img src="/api/media/${project.cover_image_id}" alt="">`
+      : (window.icon ? icon('camera') : '');
+  } else {
+    editingProjectId = null;
+    pendingCoverImageId = null;
+    document.getElementById('project-modal-title').textContent = 'Nouveau projet';
+    document.getElementById('project-modal-submit-btn').textContent = 'Créer le projet';
+    preview.innerHTML = window.icon ? icon('camera') : '';
+  }
+
+  document.getElementById('project-modal-overlay').classList.add('open');
+  document.getElementById('modal-name-input').focus();
+}
+
+function closeProjectModal() {
+  document.getElementById('project-modal-overlay').classList.remove('open');
+}
+
+document.getElementById('new-project-btn').addEventListener('click', () => openProjectModal(null));
+document.getElementById('project-modal-cancel-btn').addEventListener('click', closeProjectModal);
+document.getElementById('project-modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'project-modal-overlay') closeProjectModal();
+});
+
+document.getElementById('cover-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('cover-upload-status');
+  const preview = document.getElementById('cover-preview');
+  preview.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="">`;
+  status.textContent = 'Envoi en cours...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('field_type', 'image');
+  try {
+    const res = await fetch('/api/media/upload', { method: 'POST', credentials: 'same-origin', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      status.textContent = extractApiError(data, "Échec de l'envoi de l'image.");
+      return;
+    }
+    pendingCoverImageId = data.id;
+    status.textContent = 'Image envoyée ✓';
+  } catch (err) {
+    status.textContent = "Échec de l'envoi (connexion nécessaire).";
+  }
+});
+
+document.getElementById('project-modal-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('project-modal-error');
+  errorEl.classList.add('hidden');
+
+  const payload = {
+    name: document.getElementById('modal-name-input').value.trim(),
+    description: document.getElementById('modal-description-input').value.trim() || null,
+    start_date: document.getElementById('modal-start-date-input').value || null,
+    ngo_name: document.getElementById('modal-ngo-input').value.trim() || null,
+    main_donor: document.getElementById('modal-donor-input').value.trim() || null,
+    cover_image_id: pendingCoverImageId,
+  };
+
+  const submitBtn = document.getElementById('project-modal-submit-btn');
+  submitBtn.disabled = true;
+
+  const url = editingProjectId ? `/api/projects/${editingProjectId}` : '/api/projects';
+  const method = editingProjectId ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) { window.location.href = '/login.html'; return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      errorEl.textContent = extractApiError(data, "Erreur lors de l'enregistrement du projet.");
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    closeProjectModal();
+    loadProjects();
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+(async () => {
+  const user = await initAppShell(null);
+  renderIconSlots(document);
+  if (user) loadProjects();
+})();
+</script>
+
+</body>
+</html>

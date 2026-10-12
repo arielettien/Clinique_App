@@ -1,0 +1,80 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: clinic_db
+      POSTGRES_USER: clinic_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Défini POSTGRES_PASSWORD dans un fichier .env (voir .env.example)}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinic_user -d clinic_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./django_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://clinic_user:${POSTGRES_PASSWORD:?Défini POSTGRES_PASSWORD dans un fichier .env (voir .env.example)}@db:5432/clinic_db
+      SECRET_KEY: ${SECRET_KEY:?Défini SECRET_KEY dans un fichier .env (voir .env.example)}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      APP_RELOAD: ${APP_RELOAD:-true}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./django_backend:/app
+    # Bascule automatiquement en HTTPS si un certificat a été généré (voir
+    # la commande generate_cert) — nécessaire pour que le mode hors-ligne
+    # fonctionne sur les téléphones connectés par adresse IP locale, pas
+    # seulement "localhost". Reste en HTTP simple tant qu'aucun certificat
+    # n'existe, pour ne jamais bloquer un premier démarrage.
+    command: sh docker-entrypoint.sh
+
+  # [Nouveau] Sauvegarde automatique quotidienne de la base de données,
+  # conservée 30 jours glissants. Les fichiers .sql.gz apparaissent dans
+  # ./backups sur ta machine (grâce au montage ci-dessous) — à copier
+  # toi-même de temps en temps vers un support externe (clé USB, disque
+  # externe, etc.) : ce service protège contre une base corrompue ou
+  # effacée par erreur, pas contre la perte de la machine elle-même.
+  backup:
+    image: prodrigestivill/postgres-backup-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: clinic_db
+      POSTGRES_USER: clinic_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Défini POSTGRES_PASSWORD dans un fichier .env (voir .env.example)}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 30
+      BACKUP_KEEP_WEEKS: 8
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Chiffre chaque nouvelle sauvegarde produite par "backup" ci-dessus (mot
+  # de passe symétrique AES256), puis supprime la version en clair — un
+  # fichier .sql.gz contient l'intégralité des données patients, il ne doit
+  # jamais rester lisible tel quel sur le disque. Voir
+  # backend/backup-encrypt/decrypt-backup.sh pour restaurer une sauvegarde.
+  backup-encrypt:
+    build: ./backend/backup-encrypt
+    restart: unless-stopped
+    environment:
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE:?Défini BACKUP_ENCRYPTION_PASSPHRASE dans un fichier .env (voir .env.example)}
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      - backup
+
+volumes:
+  postgres_data:

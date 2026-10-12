@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Données — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { font-size: 1.4rem; margin: 4px 0 4px 0; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin: 16px 0; }
+  .table-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+  .table-scroll table { min-width: 100%; }
+  .data-table th { position: relative; white-space: nowrap; }
+  .th-content { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .col-filter-btn { background: none; border: none; cursor: pointer; padding: 2px 4px; font-size: 0.75rem; color: var(--ink-faint); border-radius: 3px; }
+  .col-filter-btn:hover { background: var(--border); }
+  .col-filter-btn.active { color: var(--primary); font-weight: 700; }
+  .col-filter-popup {
+    position: absolute; top: 100%; left: 0; z-index: 50; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md);
+    padding: 10px; min-width: 200px; max-width: 280px; font-weight: normal; white-space: normal;
+  }
+  .col-filter-popup .filter-values { max-height: 220px; overflow-y: auto; margin: 8px 0; }
+  .col-filter-popup label { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; padding: 3px 0; font-weight: normal; }
+  .col-filter-popup .filter-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .col-filter-popup .filter-actions button { font-size: 0.78rem; padding: 4px 8px; }
+  .col-filter-popup .select-all-row { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 4px; font-weight: 600; }
+  .bulk-actions-bar {
+    display: none; align-items: center; gap: 12px; background: var(--surface-muted);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 10px;
+  }
+  .data-table td.actions { white-space: nowrap; }
+  .data-table .actions a, .data-table .actions button {
+    font-size: 0.8rem; margin-right: var(--space-2); color: var(--primary); text-decoration: none;
+    background: none; border: none; cursor: pointer; padding: 0; font-family: var(--font-body);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .data-table .actions a:hover, .data-table .actions button:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main" style="max-width: none;">
+
+    <div class="breadcrumb"><a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="/">…</a> / Données</div>
+    <h1 id="page-title">📊 Données</h1>
+    <div class="toolbar">
+      <span class="stat-pill" id="row-count"></span>
+      <div style="display:flex; gap:8px;">
+        <a class="btn btn-secondary btn-sm" id="export-csv-link" href="#">⬇️ Export CSV</a>
+        <a class="btn btn-secondary btn-sm" id="export-xlsx-link" href="#">⬇️ Export Excel</a>
+        <a class="btn btn-ghost btn-sm" id="edit-form-link" href="#">✏️ Modifier ce formulaire</a>
+      </div>
+    </div>
+
+    <div id="referral-banner" class="bulk-actions-bar" style="display:none; background:var(--sev-medium-bg); border-color:var(--sev-medium-border);"></div>
+
+    <div class="bulk-actions-bar" id="bulk-actions-bar">
+      <span class="bulk-count"></span>
+      <button class="btn btn-danger btn-sm" onclick="deleteSelectedSubmissions()">🗑 Supprimer la sélection</button>
+      <button class="btn btn-ghost btn-sm" onclick="resetAllColumnFilters()" id="reset-filters-btn" style="display:none;">✕ Réinitialiser les filtres</button>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table" id="data-table">
+        <thead><tr id="table-head"></tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+    <p class="empty-state hidden" id="empty-message"><span class="empty-icon">📊</span>Aucune donnée enregistrée pour ce formulaire pour l'instant.</p>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const formId = params.get('form_id');
+
+if (!formId) {
+  document.body.innerHTML = '<p style="padding:40px;">Aucun formulaire sélectionné. <a href="/">Retour</a></p>';
+}
+
+let allSubmissionsCache = [];
+let columnFilters = {};   // { columnKey: Set(valeurs autorisées) }
+let selectedIds = new Set();
+let currentColumns = [];
+let hasReferralField = false; // ce formulaire a-t-il un champ S/N-S ? (colonne Admission Suivi pertinente seulement si oui)
+
+function referralBadge(status) {
+  if (status === 'admitted') return '<span class="badge" style="background:var(--success-soft); color:var(--success-dark);">Admis</span>';
+  if (status === 'pending') return '<span class="badge" style="background:var(--sev-medium-bg); color:var(--sev-medium-fg);">Admis, dossier à créer</span>';
+  if (status === 'not_admitted') return '<span class="badge" style="background:var(--sev-critical-bg); color:var(--sev-critical-fg);">Non admis</span>';
+  return '—';
+}
+
+function collectFieldColumns(definition) {
+  const columns = [];
+  (definition.sections || []).forEach(section => {
+    (section.fields || []).forEach(field => {
+      if (field.type !== 'note') columns.push({ id: field.id, label: field.label || field.id, type: field.type });
+    });
+  });
+  return columns;
+}
+
+const MEDIA_TYPES = ['image', 'audio', 'video', 'file'];
+function renderCellValue(value, colType) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (colType === 'signature') {
+    return `<img src="/api/media/${value}" alt="Signature" style="max-height:60px;background:#fff;border:1px solid var(--border);border-radius:6px;vertical-align:middle;">`;
+  }
+  if (MEDIA_TYPES.includes(colType)) {
+    const url = `/api/media/${value}`;
+    if (colType === 'image') return `<a href="${url}" target="_blank"><img src="${url}" alt="Photo" style="max-width:60px;max-height:60px;border-radius:6px;vertical-align:middle;"></a>`;
+    if (colType === 'audio') return `<audio controls src="${url}" style="max-width:220px;height:32px;"></audio>`;
+    if (colType === 'video') return `<a href="${url}" target="_blank">${window.icon ? icon('video') : ''} Voir la vidéo</a>`;
+    return `<a href="${url}" target="_blank">${window.icon ? icon('paperclip') : ''} Voir le fichier</a>`;
+  }
+  return escapeHtml(value);
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function columnValue(s, key) {
+  if (key === '__patient') return s.patient_name || '—';
+  if (key === '__date') return new Date(s.collected_at).toLocaleDateString('fr-FR');
+  if (key === '__referral') {
+    if (s.referral_status === 'admitted') return 'Admis';
+    if (s.referral_status === 'pending') return 'Admis, dossier à créer';
+    if (s.referral_status === 'not_admitted') return 'Non admis';
+    return '—';
+  }
+  const v = s.responses[key];
+  return (v === null || v === undefined || v === '') ? '(vide)' : String(v).slice(0, 60);
+}
+
+function applyColumnFilters(rows) {
+  return rows.filter(row => {
+    for (const key in columnFilters) {
+      if (!columnFilters[key].has(columnValue(row, key))) return false;
+    }
+    return true;
+  });
+}
+function anyColumnFilterActive() { return Object.keys(columnFilters).length > 0; }
+
+function toggleColumnFilterPopup(key) {
+  const existing = document.getElementById('col-filter-popup');
+  const wasForSameKey = existing && existing.dataset.key === key;
+  if (existing) existing.remove();
+  if (wasForSameKey) return;
+
+  const uniqueValues = [...new Set(allSubmissionsCache.map(r => columnValue(r, key)))].sort();
+  const activeSet = columnFilters[key];
+  const popup = document.createElement('div');
+  popup.className = 'col-filter-popup';
+  popup.id = 'col-filter-popup';
+  popup.dataset.key = key;
+  popup.innerHTML = `
+    <div class="select-all-row"><label><input type="checkbox" id="filter-select-all" ${!activeSet ? 'checked' : ''}> (Tout sélectionner)</label></div>
+    <div class="filter-values">
+      ${uniqueValues.map(v => `<label><input type="checkbox" class="filter-value-cb" value="${escapeHtml(v)}" ${(!activeSet || activeSet.has(v)) ? 'checked' : ''}> ${escapeHtml(v)}</label>`).join('')}
+    </div>
+    <div class="filter-actions">
+      <button class="btn btn-primary btn-sm" onclick="applyColumnFilterFromPopup('${key}')">Appliquer</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearColumnFilter('${key}')">Réinitialiser</button>
+    </div>
+  `;
+  document.querySelector(`th[data-col-key="${key}"]`).appendChild(popup);
+  document.getElementById('filter-select-all').addEventListener('change', (e) => {
+    popup.querySelectorAll('.filter-value-cb').forEach(cb => cb.checked = e.target.checked);
+  });
+  setTimeout(() => document.addEventListener('click', closeFilterPopupOnClickOutside), 0);
+}
+
+function closeFilterPopupOnClickOutside(e) {
+  const popup = document.getElementById('col-filter-popup');
+  if (popup && !popup.contains(e.target) && !e.target.classList.contains('col-filter-btn')) {
+    popup.remove();
+    document.removeEventListener('click', closeFilterPopupOnClickOutside);
+  }
+}
+
+function applyColumnFilterFromPopup(key) {
+  const checked = Array.from(document.querySelectorAll('.filter-value-cb:checked')).map(cb => cb.value);
+  const allValues = [...new Set(allSubmissionsCache.map(r => columnValue(r, key)))];
+  if (checked.length === allValues.length) delete columnFilters[key];
+  else columnFilters[key] = new Set(checked);
+  document.getElementById('col-filter-popup')?.remove();
+  renderTable();
+}
+function clearColumnFilter(key) {
+  delete columnFilters[key];
+  document.getElementById('col-filter-popup')?.remove();
+  renderTable();
+}
+function resetAllColumnFilters() { columnFilters = {}; renderTable(); }
+
+function toggleRowSelection(id, checked) {
+  if (checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateBulkActionsBar();
+}
+function toggleSelectAllRows(checked) {
+  document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.checked = checked;
+    if (checked) selectedIds.add(cb.value); else selectedIds.delete(cb.value);
+  });
+  updateBulkActionsBar();
+}
+function updateBulkActionsBar() {
+  const bar = document.getElementById('bulk-actions-bar');
+  document.getElementById('reset-filters-btn').style.display = anyColumnFilterActive() ? 'inline-block' : 'none';
+  if (selectedIds.size > 0) {
+    bar.style.display = 'flex';
+    bar.querySelector('.bulk-count').textContent = `${selectedIds.size} sélectionnée(s)`;
+  } else {
+    bar.style.display = anyColumnFilterActive() ? 'flex' : 'none';
+    bar.querySelector('.bulk-count').textContent = '';
+  }
+}
+
+async function deleteSingleSubmission(id) {
+  if (!confirm('Supprimer définitivement cette soumission ? Cette action est irréversible.')) return;
+  const res = await fetch(`/api/submissions/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+  if (res.ok) {
+    allSubmissionsCache = allSubmissionsCache.filter(s => s.id !== id);
+    selectedIds.delete(id);
+    document.getElementById('row-count').textContent = `${allSubmissionsCache.length} réponse(s)`;
+    renderTable();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(extractApiError(data, "Impossible de supprimer cette soumission."));
+  }
+}
+
+async function deleteSelectedSubmissions() {
+  if (selectedIds.size === 0) return;
+  if (!confirm(`Supprimer définitivement ces ${selectedIds.size} soumission(s) ? Cette action est irréversible.`)) return;
+  const ids = Array.from(selectedIds);
+  let failCount = 0;
+  for (const id of ids) {
+    const res = await fetch(`/api/submissions/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+    if (!res.ok) failCount++;
+  }
+  selectedIds.clear();
+  if (failCount > 0) alert(`${failCount} suppression(s) ont échoué.`);
+  const res = await fetch(`/api/forms/${formId}/submissions`, { credentials: 'same-origin' });
+  if (res.ok) {
+    const data = await res.json();
+    allSubmissionsCache = data.submissions;
+    document.getElementById('row-count').textContent = `${allSubmissionsCache.length} réponse(s)`;
+    renderTable();
+  }
+}
+
+function renderTable() {
+  const filtered = applyColumnFilters(allSubmissionsCache);
+  updateBulkActionsBar();
+
+  if (allSubmissionsCache.length === 0) {
+    document.getElementById('empty-message').classList.remove('hidden');
+    document.querySelector('.table-scroll').classList.add('hidden');
+    return;
+  }
+  if (filtered.length === 0) {
+    document.getElementById('table-body').innerHTML = `<tr><td colspan="99" style="color:var(--ink-muted); padding:16px;">Aucune ligne ne correspond aux filtres actifs.</td></tr>`;
+    return;
+  }
+
+  function filterBtn(key) {
+    const active = !!columnFilters[key];
+    return `<button type="button" class="col-filter-btn ${active ? 'active' : ''}" onclick="event.stopPropagation(); toggleColumnFilterPopup('${key}')">▼</button>`;
+  }
+
+  const headRow = document.getElementById('table-head');
+  headRow.innerHTML = `<th style="width:28px;"><input type="checkbox" onchange="toggleSelectAllRows(this.checked)"></th>` +
+    `<th data-col-key="__patient"><div class="th-content"><span>Patient</span>${filterBtn('__patient')}</div></th>` +
+    `<th data-col-key="__date"><div class="th-content"><span>Date</span>${filterBtn('__date')}</div></th>` +
+    currentColumns.map(c => `<th data-col-key="${c.id}"><div class="th-content"><span>${escapeHtml(c.label)}</span>${filterBtn(c.id)}</div></th>`).join('') +
+    (hasReferralField ? `<th data-col-key="__referral"><div class="th-content"><span>Admission Suivi</span>${filterBtn('__referral')}</div></th>` : '') +
+    `<th>Actions</th>`;
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = filtered.map(s => {
+    const dateStr = new Date(s.collected_at).toLocaleString('fr-FR');
+    const checked = selectedIds.has(s.id) ? 'checked' : '';
+    const cells = currentColumns.map(c => {
+      const v = s.responses[c.id];
+      return `<td>${renderCellValue(v, c.type)}</td>`;
+    }).join('');
+    const referralCell = hasReferralField ? `<td>${referralBadge(s.referral_status)}</td>` : '';
+    const actionsCell = `<td class="actions">
+      <a href="/submission.html?submission_id=${s.id}">${window.icon ? icon('pencil') : ''} Voir / Modifier</a>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="deleteSingleSubmission('${s.id}')">${window.icon ? icon('trash-2') : ''} Supprimer</button>
+    </td>`;
+    return `<tr><td><input type="checkbox" class="row-checkbox" value="${s.id}" ${checked} onchange="toggleRowSelection('${s.id}', this.checked)"></td><td><a href="/history.html?patient_id=${s.patient_id}">${escapeHtml(s.patient_name)}</a></td><td>${dateStr}</td>${cells}${referralCell}${actionsCell}</tr>`;
+  }).join('');
+}
+
+(async () => {
+  if (!formId) return;
+  const user = await initAppShell(null);
+  if (!user) return;
+
+  const res = await fetch(`/api/forms/${formId}/submissions`, { credentials: 'same-origin' });
+  if (!res.ok) {
+    document.getElementById('page-title').textContent = 'Formulaire introuvable';
+    return;
+  }
+  const data = await res.json();
+  const form = data.form;
+  allSubmissionsCache = data.submissions;
+  hasReferralField = !!data.has_referral_field;
+
+  document.getElementById('page-title').textContent = `📊 ${form.name}`;
+  document.getElementById('export-csv-link').href = `/api/forms/${form.id}/export?format=csv`;
+  document.getElementById('export-xlsx-link').href = `/api/forms/${form.id}/export?format=xlsx`;
+  document.getElementById('row-count').textContent = `${allSubmissionsCache.length} réponse(s)`;
+  if (user.role === 'admin') {
+    document.getElementById('edit-form-link').href = `/form_builder.html?form_id=${form.id}`;
+  } else {
+    document.getElementById('edit-form-link').style.display = 'none';
+  }
+
+  if (form.project_id) {
+    document.getElementById('breadcrumb-project').href = `/project_hub.html?project_id=${form.project_id}`;
+    const projRes = await fetch(`/api/projects/${form.project_id}`, { credentials: 'same-origin' });
+    if (projRes.ok) document.getElementById('breadcrumb-project').textContent = (await projRes.json()).name;
+  }
+
+  fetch(`/api/forms/${formId}/referral-candidates`, { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : [])
+    .then(candidates => {
+      if (candidates.length === 0) return;
+      const banner = document.getElementById('referral-banner');
+      banner.style.display = 'flex';
+      banner.innerHTML = `
+        <span>⚠️ ${candidates.length} patient(s) avec un résultat "Suivi nécessaire" mais toujours aucun dossier de suivi créé :</span>
+        <span style="font-weight:600;">${candidates.map(c => escapeHtml(c.patient_name)).join(', ')}</span>
+        <a href="/follow_up.html?project_id=${form.project_id}" class="btn btn-ghost btn-sm">Aller au Module Suivi</a>
+      `;
+    })
+    .catch(() => {});
+
+  if (allSubmissionsCache.length === 0) {
+    document.getElementById('empty-message').classList.remove('hidden');
+    document.querySelector('.table-scroll').classList.add('hidden');
+    return;
+  }
+
+  currentColumns = collectFieldColumns(form.definition);
+  renderTable();
+})();
+</script>
+
+</body>
+</html>

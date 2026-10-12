@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dossier patient — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .case-header {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;
+  }
+  .case-header h1 { font-size: 1.3rem; margin: 0 0 4px 0; }
+  .case-header .meta { color: var(--ink-muted); font-size: 0.88rem; }
+  .case-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; margin-left: 8px; }
+  .badge-active { background: var(--sev-low-bg, #DCFCE7); color: var(--sev-low-fg, #15803D); }
+  .badge-closed { background: var(--surface-muted); color: var(--ink-muted); }
+  .badge-lost { background: #F3F4F6; color: #374151; }
+
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before { content: ''; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+  .timeline-item { position: relative; margin-bottom: 22px; }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -28px; top: 4px; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--primary); border: 2px solid var(--surface);
+  }
+  .timeline-item.type-closure::before { background: var(--ink-muted); }
+  .timeline-date { font-size: 0.78rem; color: var(--ink-faint); font-weight: 600; text-transform: uppercase; }
+  .timeline-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 14px 16px; margin-top: 4px;
+  }
+  .timeline-card h4 { margin: 0 0 8px 0; font-size: 0.95rem; }
+  .timeline-card .resp-row { font-size: 0.85rem; color: var(--ink-muted); margin-bottom: 2px; }
+  .timeline-card .resp-row strong { color: var(--ink); }
+
+  .form-picker-list { list-style: none; padding: 0; margin: 10px 0 0 0; }
+  .form-picker-list li { margin-bottom: 8px; }
+  .form-picker-list a {
+    display: block; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    text-decoration: none; color: var(--ink); background: var(--surface);
+  }
+  .form-picker-list a:hover { border-color: var(--primary); background: var(--primary-soft); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; margin-bottom: 18px; }
+  .hidden { display: none; }
+  .error-msg { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb">
+      <a href="/">Tous les projets</a> / <a id="breadcrumb-hub" href="/">…</a> / <a id="breadcrumb-followup" href="/">Suivi</a> / <span id="breadcrumb-case">…</span>
+    </div>
+
+    <div id="error-box"></div>
+
+    <div class="case-header">
+      <div>
+        <h1 id="patient-name">Chargement…<span id="status-badge"></span></h1>
+        <div class="meta" id="case-meta"></div>
+        <a href="#" id="link-patient-history" style="font-size:0.82rem;">Voir tous les dossiers de ce patient →</a>
+      </div>
+      <div class="case-actions">
+        <button class="btn btn-primary" id="btn-new-visit-toggle">+ Nouvelle visite</button>
+        <button class="btn btn-secondary" id="btn-edit-case-toggle">Modifier ce dossier</button>
+        <button class="btn btn-secondary" id="btn-close-case">Clôturer ce cas</button>
+        <button class="btn btn-secondary hidden" id="btn-reopen-case">Réouvrir ce cas</button>
+        <button class="btn btn-ghost hidden" id="btn-delete-case" style="color:#B91C1C;">🗑 Supprimer ce dossier</button>
+      </div>
+    </div>
+
+    <div class="card hidden" id="edit-case-card">
+      <h3 style="margin-top:0;">Modifier ce dossier</h3>
+      <div class="field" style="margin-bottom:12px;">
+        <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px; color:var(--ink-muted);">Numéro de dossier</label>
+        <input type="text" id="edit-case-number" style="width:100%; max-width:320px;">
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px; color:var(--ink-muted);">Date d'inscription</label>
+        <input type="date" id="edit-case-enrolled" style="width:100%; max-width:320px;">
+      </div>
+      <p style="font-size:0.82rem; color:var(--ink-muted); margin:-4px 0 12px 0;">Le patient rattaché à ce dossier ne peut pas être changé ici — supprime et recrée le dossier si la mauvaise personne a été choisie.</p>
+      <button class="btn btn-primary" id="btn-confirm-edit-case">Enregistrer</button>
+      <button class="btn btn-ghost" id="btn-cancel-edit-case">Annuler</button>
+    </div>
+
+    <div class="card hidden" id="form-picker-card">
+      <h3 style="margin-top:0;">Choisis le formulaire à remplir pour cette visite</h3>
+      <ul class="form-picker-list" id="form-picker-list"></ul>
+    </div>
+
+    <div class="card hidden" id="close-case-card">
+      <h3 style="margin-top:0;">Clôturer ce cas</h3>
+      <div class="field" style="margin-bottom:12px;">
+        <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px; color:var(--ink-muted);">Raison</label>
+        <select id="close-reason-select" style="width:100%; max-width:320px;">
+          <option value="Guérison">Guérison</option>
+          <option value="Décès">Décès</option>
+          <option value="Perdu de vue">Perdu de vue</option>
+          <option value="Refus de poursuivre">Refus de poursuivre</option>
+          <option value="Autre">Autre (préciser)</option>
+        </select>
+      </div>
+      <div class="field" id="close-reason-other-wrap" style="display:none; margin-bottom:12px;">
+        <input type="text" id="close-reason-other" placeholder="Précise la raison…" style="width:100%; max-width:320px;">
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px; color:var(--ink-muted);">Date réelle de clôture (optionnel)</label>
+        <input type="date" id="close-date" style="width:100%; max-width:320px;">
+        <p style="font-size:0.8rem; color:var(--ink-muted); margin:4px 0 0 0;">Laisser vide = aujourd'hui.</p>
+      </div>
+      <button class="btn btn-primary" id="btn-confirm-close">Confirmer la clôture</button>
+      <button class="btn btn-ghost" id="btn-cancel-close">Annuler</button>
+    </div>
+
+    <h3 style="margin-bottom:14px;">Timeline</h3>
+    <div class="timeline" id="timeline-wrap"><p style="color:var(--ink-muted);">Chargement…</p></div>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const caseId = params.get('case_id');
+let currentCase = null;
+let isOfflineCase = false;
+
+function showError(msg) {
+  document.getElementById('error-box').innerHTML = '<div class="error-msg">' + (window.icon ? icon('triangle-alert') : '') + ' ' + msg + '</div>';
+}
+
+if (!caseId) {
+  document.body.innerHTML = '<p style="padding:40px;">Aucun cas sélectionné. <a href="/">Retour</a></p>';
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function formatDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('fr-FR');
+}
+function formatDateTime(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('fr-FR') + ' à ' + new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+// Âge en mois tant que l'enfant a moins de 5 ans (usage nutrition : "0 ans"
+// n'est d'aucune utilité pour un bébé de quelques mois, l'âge en mois est ce
+// qui compte réellement en dépistage nutritionnel jusqu'à 5 ans).
+function computeAge(dob) {
+  if (!dob) return '—';
+  const birth = new Date(dob);
+  const now = new Date();
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years < 5) return `${years * 12 + months} mois`;
+  return `${years} ans`;
+}
+function statusBadge(status) {
+  if (status === 'active') return '<span class="badge badge-active">Actif</span>';
+  if (status === 'closed') return '<span class="badge badge-closed">Clôturé</span>';
+  return '<span class="badge badge-lost">Perdu de vue</span>';
+}
+
+(async () => {
+  if (!caseId) return;
+  if (window.loadOfflineScripts) await loadOfflineScripts();
+  await loadCase();
+  try { await initAppShell(currentCase ? currentCase.project_id : null); } catch (e) { console.warn('initAppShell non disponible', e); }
+  if (window.cacheProjectForOffline && currentCase) cacheProjectForOffline(currentCase.project_id);
+})();
+
+async function loadCase() {
+  let data;
+  try {
+    const res = await fetch(`/api/cases/${caseId}/timeline`, { credentials: 'same-origin' });
+    if (res.status === 401) { window.location.href = '/login.html'; return; }
+    if (!res.ok) { showError('Dossier introuvable.'); return; }
+    data = await res.json();
+  } catch (netErr) {
+    // Hors ligne : on retombe sur le dossier et son historique mis en cache
+    // la dernière fois que ce projet a été visité en ligne.
+    if (!window.getCachedCaseTimeline) { showError("Hors ligne — ce dossier n'a encore jamais été consulté en ligne sur cet appareil."); return; }
+    const cachedCase = await offlineDb.cases.get(caseId);
+    if (!cachedCase) { showError("Hors ligne — ce dossier n'a encore jamais été consulté en ligne sur cet appareil."); return; }
+    const cachedEvents = window.getCachedCaseTimeline ? await getCachedCaseTimeline(caseId) : null;
+    data = { case: cachedCase, events: cachedEvents || [] };
+    isOfflineCase = true;
+  }
+  currentCase = data.case;
+
+  document.getElementById('patient-name').innerHTML = escapeHtml(currentCase.patient_name) + '<span id="status-badge">' + statusBadge(currentCase.status) + '</span>';
+  let metaText = `Dossier ${currentCase.case_number} · Sexe: ${currentCase.patient_sex || '—'} · Âge: ${computeAge(currentCase.patient_date_of_birth)} · Inscrit le ${formatDate(currentCase.enrolled_at)}`;
+  if (currentCase.next_visit_at) {
+    metaText += currentCase.is_overdue
+      ? ` · ${window.icon ? icon('triangle-alert') : ''} Prochaine visite attendue le ${formatDate(currentCase.next_visit_at)} (en retard)`
+      : ` · Prochaine visite prévue le ${formatDate(currentCase.next_visit_at)}`;
+  }
+  document.getElementById('case-meta').textContent = metaText;
+  if (isOfflineCase) {
+    const banner = document.createElement('div');
+    banner.className = 'alert-banner severity-medium';
+    banner.style.marginTop = '10px';
+    banner.textContent = "Hors ligne — dossier et historique tels que consultés la dernière fois en ligne. Les nouvelles visites créées maintenant seront envoyées automatiquement au retour du réseau.";
+    document.getElementById('case-meta').insertAdjacentElement('afterend', banner);
+  }
+  document.getElementById('link-patient-history').href = `/history.html?patient_id=${currentCase.patient_id}`;
+  document.getElementById('breadcrumb-case').textContent = currentCase.case_number;
+  document.getElementById('breadcrumb-hub').href = `/project_hub.html?project_id=${currentCase.project_id}`;
+  document.getElementById('breadcrumb-followup').href = `/follow_up.html?project_id=${currentCase.project_id}`;
+
+  document.getElementById('btn-close-case').classList.toggle('hidden', currentCase.status !== 'active');
+  document.getElementById('btn-reopen-case').classList.toggle('hidden', currentCase.status === 'active');
+  document.getElementById('btn-new-visit-toggle').classList.toggle('hidden', currentCase.status !== 'active');
+  document.getElementById('btn-delete-case').classList.toggle('hidden', currentCase.visit_count > 0);
+
+  renderTimeline(data.events);
+}
+
+function renderTimeline(events) {
+  const wrap = document.getElementById('timeline-wrap');
+  if (!events.length) { wrap.innerHTML = '<p style="color:var(--ink-muted);">Aucun événement pour l\'instant.</p>'; return; }
+  // L'inscription est toujours l'événement le plus ancien du dossier (rien ne
+  // peut exister avant la création du cas) — mais une visite saisie le même
+  // jour via un simple sélecteur de date est enregistrée à minuit, donc
+  // parfois numériquement "avant" l'heure réelle de création du dossier.
+  // On force donc l'inscription tout en bas plutôt que de ne comparer que
+  // les horodatages bruts.
+  const sorted = events.slice().sort((a, b) => {
+    if (a.type === 'registration') return 1;
+    if (b.type === 'registration') return -1;
+    return new Date(b.at) - new Date(a.at);
+  });
+  let html = '';
+  for (const ev of sorted) {
+    html += `<div class="timeline-item type-${ev.type}"><div class="timeline-date">${formatDateTime(ev.at)}</div><div class="timeline-card">`;
+    if (ev.type === 'registration') {
+      html += `<h4>${window.icon ? icon('circle-plus') : ''} ${escapeHtml(ev.title)}</h4><div class="resp-row">${escapeHtml(ev.description || '')}</div>`;
+    } else if (ev.type === 'closure') {
+      html += `<h4>${window.icon ? icon('lock') : ''} ${escapeHtml(ev.title)}</h4><div class="resp-row">Raison : <strong>${escapeHtml(ev.description || '—')}</strong></div>`;
+    } else {
+      html += `<h4>${window.icon ? icon('clipboard-list') : ''} ${escapeHtml(ev.title)}</h4>`;
+      const responses = ev.responses || {};
+      const fieldTypes = ev.field_types || {};
+      const keys = Object.keys(responses).slice(0, 6);
+      for (const k of keys) {
+        const v = responses[k];
+        const colType = fieldTypes[k];
+        let display;
+        if (v === null || v === undefined || v === '') {
+          display = 'N/A';
+        } else if (colType === 'signature') {
+          display = `<img src="/api/media/${v}" alt="Signature" style="max-height:70px;background:#fff;border:1px solid var(--border);border-radius:6px;vertical-align:middle;">`;
+        } else if (['image', 'audio', 'video', 'file'].includes(colType)) {
+          const url = `/api/media/${v}`;
+          if (colType === 'image') display = `<a href="${url}" target="_blank"><img src="${url}" alt="Photo" style="max-width:70px;max-height:70px;border-radius:6px;vertical-align:middle;"></a>`;
+          else if (colType === 'audio') display = `<audio controls src="${url}" style="max-width:220px;height:32px;"></audio>`;
+          else if (colType === 'video') display = `<a href="${url}" target="_blank">${window.icon ? icon('video') : ''} Voir la vidéo</a>`;
+          else display = `<a href="${url}" target="_blank">${window.icon ? icon('paperclip') : ''} Voir le fichier</a>`;
+        } else {
+          display = escapeHtml(Array.isArray(v) ? v.join(', ') : String(v));
+        }
+        html += `<div class="resp-row"><strong>${escapeHtml(k)}</strong> : ${display}</div>`;
+      }
+      if (ev.submission_id) {
+        html += `<div style="margin-top:8px;"><a href="/submission.html?submission_id=${ev.submission_id}" style="font-size:0.82rem;">${window.icon ? icon('pencil') : ''} Corriger cette visite</a></div>`;
+      }
+    }
+    html += `</div></div>`;
+  }
+  wrap.innerHTML = html;
+}
+
+/* ── Nouvelle visite : choix du formulaire ── */
+document.getElementById('btn-new-visit-toggle').addEventListener('click', async () => {
+  const card = document.getElementById('form-picker-card');
+  card.classList.toggle('hidden');
+  if (card.classList.contains('hidden')) return;
+  const list = document.getElementById('form-picker-list');
+  list.innerHTML = '<li>Chargement…</li>';
+  let forms;
+  try {
+    const res = await fetch(`/api/forms?project_id=${currentCase.project_id}`, { credentials: 'same-origin' });
+    forms = res.ok ? await res.json() : [];
+  } catch (netErr) {
+    forms = window.getCachedForms ? await getCachedForms(currentCase.project_id) : [];
+  }
+  const relevant = forms.filter(f => f.form_type === 'follow_up' || f.form_type === 'closure');
+  if (!relevant.length) {
+    list.innerHTML = '<li>Aucun formulaire de type Suivi dans ce projet. Tague un formulaire "Suivi — visite" ou "Suivi — clôture" dans le créateur de formulaire.</li>';
+    return;
+  }
+  list.innerHTML = relevant.map(f =>
+    `<li><a href="/submission.html?case_id=${caseId}&form_id=${f.id}">${escapeHtml(f.name)} (${f.form_type === 'closure' ? 'clôture' : 'visite'})</a></li>`
+  ).join('');
+});
+
+/* ── Clôture ── */
+document.getElementById('btn-close-case').addEventListener('click', () => {
+  document.getElementById('close-case-card').classList.remove('hidden');
+  document.getElementById('form-picker-card').classList.add('hidden');
+  document.getElementById('edit-case-card').classList.add('hidden');
+  document.getElementById('close-date').value = '';
+});
+document.getElementById('btn-cancel-close').addEventListener('click', () => {
+  document.getElementById('close-case-card').classList.add('hidden');
+});
+document.getElementById('close-reason-select').addEventListener('change', (e) => {
+  document.getElementById('close-reason-other-wrap').style.display = e.target.value === 'Autre' ? 'block' : 'none';
+});
+document.getElementById('btn-confirm-close').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-confirm-close');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const select = document.getElementById('close-reason-select').value;
+  const reason = select === 'Autre' ? (document.getElementById('close-reason-other').value.trim() || 'Autre') : select;
+  const status = select === 'Perdu de vue' ? 'lost' : 'closed';
+  const payload = { reason, status };
+  const closedDate = document.getElementById('close-date').value;
+  if (closedDate) payload.closed_at = closedDate;
+  let closeOk = false;
+  let apiErrorData = null;
+  try {
+    const res = await fetch(`/api/cases/${caseId}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+    closeOk = res.ok;
+    if (!res.ok) apiErrorData = await res.json().catch(() => ({}));
+  } catch (netErr) {
+    // Hors ligne : on mémorise la clôture pour l'envoi différé, comme sur
+    // l'écran Tableau de bord du Module Suivi.
+    if (window.queueCloseCaseOffline) {
+      await queueCloseCaseOffline({ caseId, reason, status, closedAt: closedDate || null });
+      if (window.updateOnlineIndicator) updateOnlineIndicator();
+      closeOk = true;
+    }
+  }
+  btn.disabled = false;
+  if (closeOk) {
+    document.getElementById('close-case-card').classList.add('hidden');
+    await loadCase();
+  } else {
+    showError(extractApiError(apiErrorData || {}, "Impossible de clôturer ce dossier."));
+  }
+});
+
+document.getElementById('btn-reopen-case').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-reopen-case');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  let ok = false;
+  try {
+    const res = await fetch(`/api/cases/${caseId}/reopen`, { method: 'POST', credentials: 'same-origin' });
+    ok = res.ok;
+  } catch (netErr) {
+    if (window.queueReopenCaseOffline) {
+      await queueReopenCaseOffline({ caseId });
+      if (window.updateOnlineIndicator) updateOnlineIndicator();
+      ok = true;
+    } else {
+      showError("Hors ligne — impossible de rouvrir ce dossier sans connexion. Réessaie une fois reconnecté.");
+    }
+  }
+  btn.disabled = false;
+  if (ok) await loadCase();
+});
+
+/* ── Modifier ── */
+document.getElementById('btn-edit-case-toggle').addEventListener('click', () => {
+  document.getElementById('edit-case-number').value = currentCase.case_number || '';
+  document.getElementById('edit-case-enrolled').value = currentCase.enrolled_at ? currentCase.enrolled_at.slice(0, 10) : '';
+  document.getElementById('edit-case-card').classList.remove('hidden');
+  document.getElementById('close-case-card').classList.add('hidden');
+  document.getElementById('form-picker-card').classList.add('hidden');
+});
+document.getElementById('btn-cancel-edit-case').addEventListener('click', () => {
+  document.getElementById('edit-case-card').classList.add('hidden');
+});
+document.getElementById('btn-confirm-edit-case').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-confirm-edit-case');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const caseNumber = document.getElementById('edit-case-number').value.trim();
+  const enrolledDate = document.getElementById('edit-case-enrolled').value;
+  const payload = { expected_updated_at: currentCase.updated_at };
+  if (caseNumber) payload.case_number = caseNumber;
+  if (enrolledDate) payload.enrolled_at = enrolledDate;
+  let ok = false;
+  let apiErrorData = null;
+  let conflict = false;
+  try {
+    const res = await fetch(`/api/cases/${caseId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+    ok = res.ok;
+    conflict = res.status === 409;
+    if (!res.ok) apiErrorData = await res.json().catch(() => ({}));
+  } catch (netErr) {
+    if (window.queueUpdateCaseOffline) {
+      await queueUpdateCaseOffline({ caseId, caseNumber, enrolledAt: enrolledDate || null });
+      if (window.updateOnlineIndicator) updateOnlineIndicator();
+      ok = true;
+    } else {
+      showError("Hors ligne — impossible de modifier ce dossier sans connexion. Réessaie une fois reconnecté.");
+    }
+  }
+  btn.disabled = false;
+  if (ok) {
+    document.getElementById('edit-case-card').classList.add('hidden');
+    await loadCase();
+  } else if (conflict) {
+    showError("Quelqu'un d'autre a modifié ce dossier entre-temps — la page va se recharger avec la version actuelle.");
+    setTimeout(() => window.location.reload(), 1800);
+  } else if (apiErrorData) {
+    showError(extractApiError(apiErrorData, "Impossible d'enregistrer les modifications."));
+  }
+});
+
+/* ── Supprimer ── */
+document.getElementById('btn-delete-case').addEventListener('click', async () => {
+  if (!confirm(`Supprimer définitivement le dossier ${currentCase.case_number} ? Cette action est irréversible.`)) return;
+  let ok = false;
+  let apiErrorData = null;
+  try {
+    const res = await fetch(`/api/cases/${caseId}`, { method: 'DELETE', credentials: 'same-origin' });
+    ok = res.ok;
+    if (!res.ok) apiErrorData = await res.json().catch(() => ({}));
+  } catch (netErr) {
+    if (window.queueDeleteCaseOffline) {
+      await queueDeleteCaseOffline({ caseId });
+      ok = true;
+    } else {
+      showError("Hors ligne — impossible de supprimer ce dossier sans connexion. Réessaie une fois reconnecté.");
+    }
+  }
+  if (ok) {
+    window.location.href = `/follow_up.html?project_id=${currentCase.project_id}`;
+  } else if (apiErrorData) {
+    showError(extractApiError(apiErrorData, "Impossible de supprimer ce dossier."));
+  }
+});
+</script>
+</body>
+</html>

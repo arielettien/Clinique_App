@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redirection — Clinique</title>
+</head>
+<body>
+<p style="font-family: sans-serif; color: #666; padding: 40px; text-align: center;">Redirection…</p>
+<script>
+  // Cette page n'existe plus : elle a été remplacée par la page hub du projet
+  // (deux modules : Enquête et Suivi). On redirige automatiquement quiconque
+  // arrive encore ici via un ancien lien ou favori.
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('project_id');
+  window.location.replace(projectId ? `/project_hub.html?project_id=${projectId}` : '/');
+</script>
+</body>
+</html>

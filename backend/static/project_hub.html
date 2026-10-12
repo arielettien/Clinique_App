@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hub du projet — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .hub-header { margin-bottom: 28px; }
+  .hub-header h1 { font-size: 1.5rem; margin: 4px 0 6px 0; }
+  .hub-header .desc { color: var(--ink-muted); font-size: 0.95rem; }
+
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  @media (max-width: 760px) {
+    .module-grid { grid-template-columns: 1fr; }
+  }
+
+  .module-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px 24px;
+    text-decoration: none;
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+    cursor: pointer;
+  }
+  .module-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+  }
+
+  .module-icon {
+    font-size: 2.4rem;
+    margin-bottom: 12px;
+    line-height: 1;
+  }
+  .module-card.survey .module-icon { color: var(--primary); }
+  .module-card.followup .module-icon { color: var(--project-2); }
+
+  .module-title {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .module-desc {
+    font-size: 0.9rem;
+    color: var(--ink-muted);
+    line-height: 1.5;
+    flex: 1;
+    margin-bottom: 18px;
+  }
+  .module-btn {
+    align-self: flex-start;
+    padding: 10px 22px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.92rem;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .module-card.survey .module-btn {
+    background: var(--primary);
+    color: white;
+  }
+  .module-card.survey .module-btn:hover {
+    background: var(--primary-dark);
+  }
+  .module-card.followup .module-btn {
+    background: var(--project-2);
+    color: white;
+  }
+  .module-card.followup .module-btn:hover {
+    background: #6D28D9;
+  }
+
+  .hub-info {
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    font-size: 0.88rem;
+    color: var(--ink-muted);
+    line-height: 1.6;
+  }
+  .hub-info strong { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb">
+      <a href="/">Tous les projets</a> / <span id="breadcrumb-name">…</span>
+    </div>
+
+    <div class="hub-header">
+      <h1 id="project-name">Chargement…</h1>
+      <p class="desc" id="project-description"></p>
+    </div>
+
+    <div class="module-grid">
+      <div class="module-card survey" id="card-survey">
+        <div class="module-icon">📝</div>
+        <div class="module-title">Module 1 : Enquête</div>
+        <div class="module-desc">
+          Créer des formulaires, collecter des données sur le terrain et exporter les résultats pour analyse.
+          Gestion des formulaires, des soumissions et des exports.
+        </div>
+        <a class="module-btn" id="btn-survey" href="#">Entrer dans le module →</a>
+      </div>
+
+      <div class="module-card followup" id="card-followup">
+        <div class="module-icon">📋</div>
+        <div class="module-title">Module 2 : Suivi</div>
+        <div class="module-desc">
+          Suivi longitudinal des patients : création de dossiers, visites périodiques, formulaires de suivi et clôture.
+          Inspiré de CommCare.
+        </div>
+        <a class="module-btn" id="btn-followup" href="#">Entrer dans le module →</a>
+      </div>
+    </div>
+
+    <div class="hub-info">
+      <strong>💡 Comment ça marche ?</strong><br>
+      Le <strong>Module 1 (Enquête)</strong> sert à collecter des données transversales (enquêtes, dépistages).
+      Quand un patient doit être suivi dans le temps (sur la base de critères cliniques), il est transféré vers le
+      <strong>Module 2 (Suivi)</strong> où il aura un dossier avec un identifiant unique, des visites planifiées et un suivi longitudinal.
+    </div>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const projectId = params.get('project_id');
+
+if (!projectId) {
+  document.body.innerHTML = '<p style="padding:40px;">Aucun projet sélectionné. <a href="/">Retour</a></p>';
+}
+
+(async () => {
+  if (!projectId) return;
+
+  const user = await initAppShell(projectId);
+  if (!user) return;
+
+  const res = await fetch(`/api/projects/${projectId}`, { credentials: 'same-origin' });
+  if (!res.ok) {
+    document.getElementById('project-name').textContent = 'Projet introuvable';
+    return;
+  }
+  const project = await res.json();
+
+  document.getElementById('project-name').textContent = project.name;
+  document.getElementById('breadcrumb-name').textContent = project.name;
+  document.getElementById('project-description').textContent = project.description || '';
+  document.title = `${project.name} — Hub`;
+
+  document.getElementById('btn-survey').href = `/survey.html?project_id=${projectId}`;
+  document.getElementById('btn-followup').href = `/follow_up.html?project_id=${projectId}`;
+
+  document.getElementById('card-survey').addEventListener('click', (e) => {
+    if (e.target.closest('a')) return;
+    window.location.href = `/survey.html?project_id=${projectId}`;
+  });
+  document.getElementById('card-followup').addEventListener('click', (e) => {
+    if (e.target.closest('a')) return;
+    window.location.href = `/follow_up.html?project_id=${projectId}`;
+  });
+})();
+</script>
+
+</body>
+</html>

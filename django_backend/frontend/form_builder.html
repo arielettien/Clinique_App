@@ -1,0 +1,1569 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Créateur de formulaire — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .app-main { padding-bottom: 90px; max-width: none; }
+  h1 { font-size: 1.35rem; margin: 4px 0 14px 0; }
+
+  .builder-topbar { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
+  .builder-topbar input#form-name { flex: 1; font-size: 1rem; padding: 10px 12px; }
+  .mode-toggle { display: flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; flex-shrink: 0; }
+  .mode-toggle button {
+    padding: 9px 16px; border: none; background: var(--surface); color: var(--ink-muted);
+    font-size: 0.87rem; font-weight: 600; cursor: pointer;
+  }
+  .mode-toggle button.active { background: var(--primary); color: white; }
+
+  .builder-layout { display: flex; gap: 20px; align-items: flex-start; }
+  .question-list-panel { flex: 0 0 320px; min-width: 0; }
+  .question-settings-panel { flex: 1; min-width: 420px; position: sticky; top: 20px; }
+
+  /* --- Sections / groupes (façon begin_group / end_group de Kobo) --- */
+  .section-block {
+    border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+    padding: 10px; margin-bottom: 14px; background: var(--surface-muted);
+  }
+  .section-header { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .section-title-input {
+    flex: 1; font-family: var(--font-display); font-weight: 600; font-size: 0.92rem;
+    border: 1px solid transparent; background: transparent; padding: 5px 7px; border-radius: var(--radius-sm);
+  }
+  .section-title-input:focus { background: var(--surface); border-color: var(--primary); outline: none; }
+  .section-title-input::placeholder { color: var(--ink-faint); font-weight: 500; }
+  .section-actions { display: flex; gap: 1px; flex-shrink: 0; }
+  .section-actions button { background: transparent; border: none; cursor: pointer; padding: 3px 6px; font-size: 0.78rem; color: var(--ink-faint); }
+  .section-actions button:hover:not(:disabled) { color: var(--ink); }
+  .section-actions button:disabled { opacity: 0.3; cursor: default; }
+  .add-question-in-section-btn {
+    width: 100%; margin-top: 6px; padding: 7px; background: var(--surface); border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm); color: var(--ink-muted); font-size: 0.8rem; cursor: pointer;
+  }
+  .add-question-in-section-btn:hover { background: var(--primary-soft); color: var(--primary-dark); border-color: var(--primary); }
+  #add-section-btn {
+    display: block; width: 100%; padding: 10px; margin-top: 6px;
+    background: var(--surface); border: 2px dashed var(--primary); color: var(--primary);
+    border-radius: var(--radius-md); font-size: 0.88rem; cursor: pointer; font-weight: 600;
+  }
+  #add-section-btn:hover { background: var(--primary-soft); }
+
+  /* --- Listes de choix réutilisables (feuille "choices" de Kobo) --- */
+  .choice-lists-card { margin-bottom: 18px; padding: 14px 18px; }
+  .choice-lists-toggle {
+    width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+    font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; color: var(--ink);
+    display: flex; align-items: center; gap: 8px; padding: 0;
+  }
+  #choice-lists-count { font-weight: 500; color: var(--ink-faint); font-size: 0.85rem; }
+  #choice-lists-panel { margin-top: 14px; }
+  .choice-list-block {
+    border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+    padding: 10px 12px; margin-bottom: 12px; background: var(--surface-muted);
+  }
+  .choice-list-header { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .choice-list-name-input { flex: 1; font-weight: 600; }
+  .choice-list-delete-btn { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 9px; }
+  .choice-list-used-by { font-size: 0.76rem; color: var(--ink-faint); margin-bottom: 6px; }
+  #add-choice-list-btn {
+    display: block; width: 100%; padding: 9px; background: var(--surface); border: 2px dashed var(--primary);
+    color: var(--primary); border-radius: var(--radius-md); font-size: 0.85rem; cursor: pointer; font-weight: 600;
+  }
+  #add-choice-list-btn:hover { background: var(--primary-soft); }
+  .options-source-row { margin-bottom: 10px; }
+  .options-source-row select { min-width: 220px; }
+  .list-in-use-note { font-size: 0.82rem; color: var(--ink-muted); margin-top: 8px; padding: 8px 10px; background: var(--surface-muted); border-radius: var(--radius-sm); }
+  .hint-input-row { margin-bottom: 12px; }
+  .hint-input-row input { width: 100%; box-sizing: border-box; }
+  .pattern-row { display: flex; gap: 10px; margin-top: 10px; }
+  .pattern-row input { flex: 1; }
+
+  .choice-lists-card { margin-bottom: 18px; }
+  .choice-lists-toggle {
+    width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+    font-size: 0.92rem; font-weight: 600; color: var(--ink); padding: 0;
+  }
+  #choice-lists-count { font-weight: 400; color: var(--ink-faint); font-size: 0.82rem; }
+  #choice-lists-panel { margin-top: 14px; }
+  .choice-list-block {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px;
+    margin-bottom: 10px; background: var(--surface-muted);
+  }
+  .choice-list-header { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .choice-list-name-input { flex: 1; font-weight: 600; }
+  .choice-list-delete-btn {
+    background: transparent; border: none; cursor: pointer; padding: 4px 8px;
+    font-size: 0.85rem; color: var(--ink-faint);
+  }
+  .choice-list-delete-btn:hover { color: var(--sev-critical-fg); }
+  #add-choice-list-btn {
+    font-size: 0.85rem; color: var(--primary); background: none; border: none;
+    cursor: pointer; padding: 4px 0; font-weight: 600;
+  }
+
+  .question-row {
+    display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: var(--surface);
+    border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius-sm); margin-bottom: 6px; cursor: pointer;
+  }
+  .question-row:hover { background: #fff; filter: brightness(0.98); }
+  .question-row.selected { border-left-color: var(--primary); background: var(--primary-soft); }
+  .question-row .q-type-icon { flex-shrink: 0; font-size: 1rem; display: inline-flex; align-items: center; color: var(--ink-faint); }
+  .question-row .q-label { flex: 1; min-width: 0; font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .question-row .q-label.empty { color: var(--ink-faint); font-style: italic; }
+  .question-row .q-badges { display: flex; gap: 3px; flex-shrink: 0; }
+  .question-row .mini-badge { font-size: 0.68rem; padding: 1px 5px; border-radius: 100px; background: var(--surface-muted); }
+  .question-row .mini-badge.cond { background: #EDE9FE; }
+  .question-row .mini-badge.alert { background: var(--sev-medium-bg); }
+  .question-row .q-row-actions { display: flex; gap: 2px; flex-shrink: 0; }
+  .question-row .q-row-actions button {
+    background: transparent; border: none; cursor: pointer; padding: 2px 5px; font-size: 0.78rem; color: var(--ink-faint);
+  }
+  .question-row .q-row-actions button:hover { color: var(--ink); }
+
+  .settings-empty { text-align: center; color: var(--ink-faint); padding: 60px 20px; }
+
+  .question-header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .question-header select.type-select { flex: 0 0 180px; }
+  .question-header input.label-input { flex: 1; font-size: 1rem; }
+  .section-move-row { margin-bottom: 12px; }
+  .section-move-row select { min-width: 200px; }
+
+  .field-id-hint { font-size: 0.76rem; color: var(--ink-faint); margin-bottom: 14px; font-family: var(--font-mono); }
+  .field-id-row { margin-bottom: 14px; }
+  .field-id-row label { font-size: 0.78rem; color: var(--ink-faint); display: block; margin-bottom: 4px; font-weight: 500; }
+  .field-id-input { font-family: var(--font-mono); font-size: 0.85rem; width: 100%; box-sizing: border-box; }
+  .field-id-warning { font-size: 0.76rem; color: var(--sev-medium-fg); margin-top: 4px; }
+  .settings-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .settings-row label { font-size: 0.83rem; color: var(--ink-muted); display: flex; align-items: center; gap: 5px; font-weight: 500; }
+  .settings-row input[type="number"] { width: 90px; }
+
+  .options-editor { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .options-editor .option-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .options-editor .option-row input { flex: 1; }
+  .options-editor .option-row button { background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; padding: 5px 9px; }
+  .add-option-btn { font-size: 0.85rem; color: var(--primary); background: none; border: none; cursor: pointer; padding: 4px 0; font-weight: 600; }
+
+  .formula-hint { font-size: 0.76rem; color: var(--ink-faint); margin-top: 4px; }
+  input.formula-input { width: 100%; font-family: var(--font-mono); box-sizing: border-box; }
+
+  .advanced-block { margin-top: 16px; padding: 14px 16px; background: var(--surface-muted); border-radius: var(--radius-sm); }
+  .advanced-block .block-title { font-size: 0.82rem; font-weight: 600; color: var(--ink-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+
+  .rule-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .rule-row select, .rule-row input { font-size: 0.85rem; padding: 7px 9px; }
+  .rule-row select.rule-field { flex: 1.3; min-width: 0; }
+  .rule-row select.rule-op { flex: 1; min-width: 0; }
+  .rule-row .rule-value { flex: 1; min-width: 0; }
+  .rule-row .rule-remove-btn { flex: 0 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 9px; }
+  .and-label { font-size: 0.72rem; font-weight: 700; color: var(--ink-faint); text-transform: uppercase; margin: -2px 0 6px 4px; }
+  .add-rule-btn { font-size: 0.82rem; color: var(--primary); background: none; border: none; cursor: pointer; padding: 2px 0; font-weight: 600; }
+  .no-condition-hint { font-size: 0.82rem; color: var(--ink-faint); margin-bottom: 8px; }
+
+  .alert-extra-row { display: flex; gap: 8px; margin-top: 8px; }
+  .alert-extra-row input[type="text"] { flex: 1; }
+  .alert-extra-row select { flex: 0 0 130px; }
+
+  #save-bar {
+    position: fixed; bottom: 0; left: 240px; right: 0; background: var(--surface);
+    border-top: 1px solid var(--border); padding: 14px 20px; display: flex;
+    justify-content: center; gap: 14px; box-shadow: 0 -2px 12px rgba(0,0,0,0.06); z-index: 10;
+  }
+  #save-status { font-size: 0.9rem; align-self: center; color: var(--primary-dark); font-weight: 600; }
+  @media (max-width: 1100px) { #save-bar { left: 0; } .builder-layout { flex-direction: column; } .question-settings-panel { position: static; width: 100%; min-width: 0; } }
+
+  /* --- Mode aperçu --- */
+  #preview-view .preview-banner {
+    background: var(--primary-soft); color: var(--primary-dark); padding: 10px 16px;
+    border-radius: var(--radius-sm); font-size: 0.88rem; font-weight: 600; margin-bottom: 18px;
+  }
+  #preview-view .section { margin-bottom: 18px; }
+  #preview-view .field { margin-bottom: 14px; }
+  #preview-view .field label { display: block; font-size: 0.88rem; margin-bottom: 4px; }
+  #preview-view .field input, #preview-view .field select { width: 100%; box-sizing: border-box; }
+  #preview-view .field input[readonly] { background: var(--surface-muted); color: var(--ink-muted); }
+  #preview-view .field-hint { font-size: 0.8rem; color: var(--ink-faint); margin: -2px 0 6px 0; }
+  #preview-view .checkbox-group { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  #preview-view .checkbox-option { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; font-weight: 400; cursor: pointer; }
+  #preview-view .checkbox-option input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb"><a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="#">…</a> / <span id="breadcrumb-form">Formulaire</span></div>
+    <h1 id="page-title">Nouveau formulaire</h1>
+
+    <div class="builder-topbar">
+      <input type="text" id="form-name" placeholder="Nom du formulaire (ex : Consultation initiale, Suivi mensuel...)">
+      <select id="form-type-select" style="max-width:220px;">
+        <option value="survey">Type : Enquête</option>
+        <option value="registration">Type : Suivi — inscription (en plus)</option>
+        <option value="follow_up">Type : Suivi — visite</option>
+        <option value="closure">Type : Suivi — clôture</option>
+      </select>
+      <div class="mode-toggle">
+        <button type="button" id="mode-build-btn" class="active">✏️ Construire</button>
+        <button type="button" id="mode-preview-btn">👁 Aperçu</button>
+      </div>
+    </div>
+
+    <p class="alert-banner severity-medium hidden" id="warning-box">⚠️ Ce formulaire a peut-être déjà des réponses enregistrées. Le modifier peut rendre l'historique plus difficile à relire.</p>
+
+    <div class="card" id="public-link-card" style="display:none; margin-bottom:18px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <h3 style="margin:0; font-size:0.95rem;">🔗 Lien communautaire</h3>
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="public-link-toggle"> Activé
+        </label>
+      </div>
+      <div id="public-link-body" style="font-size:0.85rem; color:var(--ink-muted);"></div>
+    </div>
+
+    <div id="build-view">
+      <div class="card choice-lists-card">
+        <button type="button" id="toggle-choice-lists-btn" class="choice-lists-toggle">📋 Listes de choix réutilisables <span id="choice-lists-count"></span> ▾</button>
+        <div id="choice-lists-panel" class="hidden"></div>
+      </div>
+      <div class="builder-layout">
+        <div class="question-list-panel">
+          <div id="question-list"></div>
+          <button type="button" id="add-section-btn">+ Ajouter une section</button>
+        </div>
+        <div class="question-settings-panel card" id="settings-panel"></div>
+      </div>
+    </div>
+
+    <div id="preview-view" class="hidden">
+      <div class="preview-banner">👁 Mode aperçu — rien de ce que tu remplis ici n'est enregistré. Sert à tester la logique et les alertes.</div>
+      <div id="preview-form"></div>
+    </div>
+
+  </main>
+</div>
+
+<div id="save-bar">
+  <span id="save-status"></span>
+  <button type="button" id="save-btn" class="btn btn-primary">💾 Enregistrer le formulaire</button>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const formId = params.get('form_id');
+const projectIdFromUrl = params.get('project_id');
+
+// --- État : une liste de SECTIONS, chacune contenant sa propre liste de questions ---
+// (équivalent exact des groupes begin_group / end_group de Kobo/XLSForm)
+let sections = [];
+let sectionUidCounter = 0;
+let questionUidCounter = 0;
+let currentProjectId = projectIdFromUrl;
+let selectedQuestionUid = null;
+
+// Listes de choix réutilisables entre plusieurs questions (comme la feuille
+// "choices" de Kobo) : [{ uid, name, options: [{label}] }]
+let choiceLists = [];
+let choiceListUidCounter = 0;
+
+const TYPE_LABELS = {
+  text: 'Texte libre', number: 'Nombre entier', decimal: 'Nombre décimal', date: 'Date',
+  select_one: 'Choix unique', select_multiple: 'Choix multiples', boolean: 'Oui / Non',
+  calculated: 'Champ calculé', note: 'Note (texte informatif)',
+  image: 'Photo', audio: 'Audio', video: 'Vidéo', file: 'Fichier', signature: 'Signature',
+};
+const TYPE_ICONS = {
+  text: 'align-left', number: 'hash', decimal: 'hash', date: 'calendar', select_one: 'circle-dot',
+  select_multiple: 'square-check', boolean: 'circle-check', calculated: 'sigma', note: 'message-square',
+  image: 'camera', audio: 'mic', video: 'video', file: 'paperclip', signature: 'pencil',
+};
+
+function slugify(text) {
+  let s = (text || '').toString().toLowerCase().trim();
+  s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  s = s.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!s) s = 'champ';
+  if (/^[0-9]/.test(s)) s = 'q_' + s;
+  return s;
+}
+
+// --- Utilitaires de recherche dans la structure sections -> questions ---
+
+function findQuestion(uid) {
+  for (const sec of sections) {
+    const q = sec.questions.find(qq => qq.uid === uid);
+    if (q) return { question: q, section: sec };
+  }
+  return null;
+}
+
+// Calcule l'identifiant technique de chaque question — SAUF pour celles dont
+// l'identifiant a déjà été fixé manuellement (ou chargé depuis un formulaire
+// existant), exactement comme le "name" de Kobo qui reste stable même si on
+// reformule le "label". Sans ça, reformuler une question après une collecte
+// de données changerait silencieusement la variable et ferait disparaître
+// les anciennes réponses de l'export.
+function computeFieldIds() {
+  const seen = {};
+
+  // D'abord, on fige la place des identifiants déjà fixés (manuellement ou chargés).
+  sections.forEach(sec => {
+    sec.questions.forEach(q => {
+      if (q.idManuallySet && q.id) seen[q.id] = q.uid;
+    });
+  });
+
+  // Ensuite seulement, on calcule ceux qui sont encore automatiques.
+  sections.forEach(sec => {
+    sec.questions.forEach(q => {
+      if (q.idManuallySet && q.id) return;
+      let base = slugify(q.label);
+      let candidate = base;
+      let n = 2;
+      while (seen[candidate] && seen[candidate] !== q.uid) { candidate = `${base}_${n}`; n++; }
+      seen[candidate] = q.uid;
+      q.id = candidate;
+    });
+  });
+}
+
+// Renvoie toutes les questions qui apparaissent AVANT `uid`, toutes sections
+// confondues, dans l'ordre global du formulaire — utilisées dans les formules
+// et les conditions (une condition peut référencer une question d'une section précédente).
+// Renvoie les options RÉELLES d'une question — qu'elles soient définies en
+// ligne, ou qu'elle utilise une liste de choix réutilisable (auquel cas
+// `q.options` seul ne suffit pas, il faut aller chercher la vraie liste).
+function resolveQuestionOptions(q) {
+  if (q.optionsSource === 'list' && q.listUid !== null && q.listUid !== undefined) {
+    const list = choiceLists.find(l => l.uid === q.listUid);
+    return list ? list.options : [];
+  }
+  return q.options || [];
+}
+
+function availableFieldsBefore(uid) {
+  computeFieldIds();
+  const list = [];
+  outer:
+  for (const sec of sections) {
+    for (const q of sec.questions) {
+      if (q.uid === uid) break outer;
+      if (q.type !== 'note') list.push({ id: q.id, label: q.label || q.id, type: q.type, options: resolveQuestionOptions(q) });
+    }
+  }
+  return list;
+}
+
+// --- Gestion des sections ---
+
+function addSection() {
+  const sec = { uid: sectionUidCounter++, title: '', questions: [], relevantRules: [] };
+  sections.push(sec);
+  render();
+  return sec;
+}
+
+function removeSection(sectionUid) {
+  const sec = sections.find(s => s.uid === sectionUid);
+  if (!sec) return;
+  const msg = sec.questions.length > 0
+    ? `Supprimer cette section et ses ${sec.questions.length} question(s) ?`
+    : 'Supprimer cette section ?';
+  if (!confirm(msg)) return;
+  const wasSelectedInside = sec.questions.some(q => q.uid === selectedQuestionUid);
+  sections = sections.filter(s => s.uid !== sectionUid);
+  if (wasSelectedInside) selectedQuestionUid = null;
+  render();
+}
+
+function moveSection(sectionUid, direction) {
+  const idx = sections.findIndex(s => s.uid === sectionUid);
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= sections.length) return;
+  const [sec] = sections.splice(idx, 1);
+  sections.splice(newIdx, 0, sec);
+  render();
+}
+
+// --- Gestion des listes de choix réutilisables (feuille "choices" de Kobo) ---
+
+function addChoiceList() {
+  choiceLists.push({ uid: choiceListUidCounter++, name: '', options: [{ label: '' }] });
+  render();
+}
+
+function removeChoiceList(uid) {
+  const list = choiceLists.find(l => l.uid === uid);
+  if (!list) return;
+  const usedBy = [];
+  sections.forEach(sec => sec.questions.forEach(q => {
+    if (q.optionsSource === 'list' && q.listUid === uid) usedBy.push(q.label || '(question sans titre)');
+  }));
+  const msg = usedBy.length > 0
+    ? `Cette liste est utilisée par : ${usedBy.join(', ')}. La supprimer fera repasser ces questions en "Définir ici" (options vides). Continuer ?`
+    : 'Supprimer cette liste de choix ?';
+  if (!confirm(msg)) return;
+  sections.forEach(sec => sec.questions.forEach(q => {
+    if (q.optionsSource === 'list' && q.listUid === uid) {
+      q.optionsSource = 'inline';
+      q.listUid = null;
+      if (!q.options || q.options.length === 0) q.options = [{ label: '' }];
+    }
+  }));
+  choiceLists = choiceLists.filter(l => l.uid !== uid);
+  render();
+}
+
+// --- Gestion des questions ---
+
+function addQuestion(sectionUid, initial) {
+  const sec = sections.find(s => s.uid === sectionUid);
+  if (!sec) return;
+  const q = Object.assign({
+    uid: questionUidCounter++, type: 'text', label: '', hint: '', required: false, min: '', max: '',
+    pattern: '', patternMessage: '', unique: false, ageCheck: false, nextVisitMarker: false, triggersReferral: false,
+    options: [{ label: '' }], optionsSource: 'inline', listUid: null,
+    formula: '', relevantRules: [], alertRules: [],
+    alertMessage: '', alertSeverity: 'medium', idManuallySet: false,
+  }, initial || {});
+  sec.questions.push(q);
+  selectedQuestionUid = q.uid;
+  render();
+}
+
+function removeQuestion(uid) {
+  for (const sec of sections) {
+    const idx = sec.questions.findIndex(q => q.uid === uid);
+    if (idx !== -1) { sec.questions.splice(idx, 1); break; }
+  }
+  if (selectedQuestionUid === uid) {
+    selectedQuestionUid = null;
+    outer:
+    for (const sec of sections) {
+      for (const q of sec.questions) { selectedQuestionUid = q.uid; break outer; }
+    }
+  }
+  render();
+}
+
+function moveQuestion(uid, direction) {
+  for (const sec of sections) {
+    const idx = sec.questions.findIndex(q => q.uid === uid);
+    if (idx !== -1) {
+      const newIdx = idx + direction;
+      if (newIdx < 0 || newIdx >= sec.questions.length) return;
+      const [q] = sec.questions.splice(idx, 1);
+      sec.questions.splice(newIdx, 0, q);
+      render();
+      return;
+    }
+  }
+}
+
+function moveQuestionToSection(uid, targetSectionUid) {
+  let question = null;
+  for (const sec of sections) {
+    const idx = sec.questions.findIndex(q => q.uid === uid);
+    if (idx !== -1) { question = sec.questions.splice(idx, 1)[0]; break; }
+  }
+  if (!question) return;
+  const targetSec = sections.find(s => s.uid === targetSectionUid);
+  if (targetSec) targetSec.questions.push(question);
+  render();
+}
+
+function makeQuestionFromField(f, listNameToUid) {
+  const usesSharedList = !!(f.list_name && listNameToUid && listNameToUid[f.list_name] !== undefined);
+  return {
+    uid: questionUidCounter++,
+    id: f.id, idManuallySet: true, // un champ chargé d'un formulaire existant garde SON identifiant, pour toujours
+    type: f.type, label: f.label || f.id, hint: f.hint || '', required: !!f.required,
+    min: (f.validation && f.validation.min !== undefined) ? f.validation.min : '',
+    max: (f.validation && f.validation.max !== undefined) ? f.validation.max : '',
+    pattern: (f.validation && f.validation.pattern) || '',
+    patternMessage: (f.validation && f.validation.pattern_message) || '',
+    unique: !!(f.validation && f.validation.unique),
+    ageCheck: !!(f.validation && f.validation.check_against_dob),
+    optionsSource: usesSharedList ? 'list' : 'inline',
+    listUid: usesSharedList ? listNameToUid[f.list_name] : null,
+    options: (f.options && f.options.length > 0) ? f.options.map(o => ({ label: o.label, value: o.value })) : [{ label: '' }],
+    formula: f.formula || '',
+    relevantRules: parseConditionToRules(f.relevant || ''),
+    alertRules: parseConditionToRules(f.alert_if || ''),
+    alertMessage: f.alert_message || '',
+    alertSeverity: f.alert_severity || 'medium',
+    nextVisitMarker: !!f.next_visit_marker,
+    triggersReferral: !!f.triggers_referral,
+  };
+}
+
+// --- Conversion entre "règles visuelles" (menus déroulants) et texte de condition ---
+
+function operatorsForType(fieldType) {
+  if (fieldType === 'number' || fieldType === 'decimal') {
+    return [['==', 'est égal à'], ['!=', 'est différent de'], ['>', 'est supérieur à'],
+            ['<', 'est inférieur à'], ['>=', 'est supérieur ou égal à'], ['<=', 'est inférieur ou égal à']];
+  }
+  if (fieldType === 'select_multiple') {
+    return [['selected', 'contient'], ['not_selected', 'ne contient pas']];
+  }
+  return [['==', 'est égal à'], ['!=', 'est différent de']];
+}
+
+function rulesToConditionString(rules) {
+  const parts = rules
+    .filter(r => r.fieldId && r.value !== '' && r.value !== undefined && r.value !== null)
+    .map(r => {
+      const isNumericLiteral = /^-?\d+(\.\d+)?$/.test(String(r.value));
+      const valueLiteral = isNumericLiteral ? r.value : `'${String(r.value).replace(/'/g, "")}'`;
+      if (r.operator === 'selected') return `selected(${r.fieldId}, ${valueLiteral})`;
+      if (r.operator === 'not_selected') return `not selected(${r.fieldId}, ${valueLiteral})`;
+      return `${r.fieldId} ${r.operator} ${valueLiteral}`;
+    });
+  return parts.join(' and ');
+}
+
+function parseConditionToRules(conditionStr) {
+  if (!conditionStr || !conditionStr.trim()) return [];
+  const clauses = conditionStr.split(/\s+and\s+/i);
+  const rules = [];
+  const selectedPattern = /^(not\s+)?selected\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*(.+?)\s*\)$/i;
+  const opPattern = /^(.+?)\s*(==|!=|<=|>=|<|>)\s*(.+)$/;
+  for (const clause of clauses) {
+    const trimmed = clause.trim();
+    const selMatch = trimmed.match(selectedPattern);
+    if (selMatch) {
+      let [, negation, fieldId, rawValue] = selMatch;
+      rawValue = rawValue.trim();
+      if ((rawValue.startsWith("'") && rawValue.endsWith("'")) || (rawValue.startsWith('"') && rawValue.endsWith('"'))) {
+        rawValue = rawValue.slice(1, -1);
+      }
+      rules.push({ fieldId, operator: negation ? 'not_selected' : 'selected', value: rawValue });
+      continue;
+    }
+    const m = trimmed.match(opPattern);
+    if (!m) continue;
+    let [, fieldId, op, rawValue] = m;
+    fieldId = fieldId.trim();
+    rawValue = rawValue.trim();
+    if ((rawValue.startsWith("'") && rawValue.endsWith("'")) || (rawValue.startsWith('"') && rawValue.endsWith('"'))) {
+      rawValue = rawValue.slice(1, -1);
+    }
+    rules.push({ fieldId, operator: op, value: rawValue });
+  }
+  return rules;
+}
+
+function renderRuleRow(rule, availableFields, onFieldChange, onRemove) {
+  const row = document.createElement('div');
+  row.className = 'rule-row';
+  const fieldFound = availableFields.some(f => f.id === rule.fieldId);
+  const fieldOptions = availableFields.map(f => `<option value="${f.id}" ${rule.fieldId === f.id ? 'selected' : ''}>${f.label}</option>`).join('');
+  const fieldExtra = (rule.fieldId && !fieldFound) ? `<option value="${rule.fieldId}" selected>${rule.fieldId} (champ introuvable)</option>` : '';
+  const referencedField = availableFields.find(f => f.id === rule.fieldId);
+  const opOptions = operatorsForType(referencedField ? referencedField.type : 'text')
+    .map(([val, label]) => `<option value="${val}" ${rule.operator === val ? 'selected' : ''}>${label}</option>`).join('');
+
+  let valueInputHtml;
+  if (referencedField && (referencedField.type === 'select_one' || referencedField.type === 'select_multiple')) {
+    const validOptions = (referencedField.options || []).filter(o => o.label);
+    // Si la valeur actuelle ne correspond à aucun choix réel (ex : vient d'être
+    // réinitialisée après un changement de champ), le navigateur affichera quand
+    // même le premier choix comme sélectionné — on synchronise donc la donnée
+    // réelle sur ce même premier choix, pour que ce qui est affiché et ce qui est
+    // enregistré soient toujours identiques.
+    if (validOptions.length > 0 && !validOptions.some(o => slugify(o.label) === rule.value)) {
+      rule.value = slugify(validOptions[0].label);
+    }
+    const opts = validOptions.map(o => {
+      const val = slugify(o.label);
+      return `<option value="${val}" ${rule.value === val ? 'selected' : ''}>${o.label}</option>`;
+    }).join('');
+    valueInputHtml = `<select class="rule-value">${opts}</select>`;
+  } else if (referencedField && referencedField.type === 'boolean') {
+    if (rule.value !== 'true' && rule.value !== 'false') rule.value = 'true';
+    valueInputHtml = `<select class="rule-value"><option value="true" ${rule.value === 'true' ? 'selected' : ''}>Oui</option><option value="false" ${rule.value === 'false' ? 'selected' : ''}>Non</option></select>`;
+  } else if (referencedField && (referencedField.type === 'number' || referencedField.type === 'decimal')) {
+    valueInputHtml = `<input type="number" class="rule-value" value="${rule.value ?? ''}" step="any">`;
+  } else {
+    valueInputHtml = `<input type="text" class="rule-value" value="${(rule.value || '').toString().replace(/"/g, '&quot;')}">`;
+  }
+
+  row.innerHTML = `
+    <select class="rule-field">${fieldExtra}${fieldOptions}</select>
+    <select class="rule-op">${opOptions}</select>
+    ${valueInputHtml}
+    <button type="button" class="rule-remove-btn" title="Supprimer">✕</button>
+  `;
+  row.querySelector('.rule-field').addEventListener('change', (e) => { rule.fieldId = e.target.value; rule.value = ''; onFieldChange(); });
+  row.querySelector('.rule-op').addEventListener('change', (e) => { rule.operator = e.target.value; });
+  const valueEl = row.querySelector('.rule-value');
+  valueEl.addEventListener('input', (e) => { rule.value = e.target.value; });
+  valueEl.addEventListener('change', (e) => { rule.value = e.target.value; });
+  row.querySelector('.rule-remove-btn').addEventListener('click', onRemove);
+  return row;
+}
+
+function renderConditionBlock(container, rules, availableFields, addLabel, onAnyChange) {
+  container.innerHTML = '';
+  if (availableFields.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'no-condition-hint';
+    hint.textContent = "Ajoute d'abord d'autres questions au-dessus pour pouvoir poser une condition.";
+    container.appendChild(hint);
+    return;
+  }
+  if (rules.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'no-condition-hint';
+    hint.textContent = 'Aucune condition — toujours active.';
+    container.appendChild(hint);
+  }
+  rules.forEach((rule, idx) => {
+    if (idx > 0) {
+      const andLabel = document.createElement('div');
+      andLabel.className = 'and-label';
+      andLabel.textContent = 'ET';
+      container.appendChild(andLabel);
+    }
+    container.appendChild(renderRuleRow(rule, availableFields, onAnyChange, () => { rules.splice(idx, 1); onAnyChange(); }));
+  });
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'add-rule-btn';
+  addBtn.textContent = addLabel;
+  addBtn.addEventListener('click', () => { rules.push({ fieldId: availableFields[0].id, operator: '==', value: '' }); onAnyChange(); });
+  container.appendChild(addBtn);
+}
+
+// --- Rendu de la liste (sections + questions imbriquées), colonne de gauche ---
+// --- Rendu du panneau des listes de choix réutilisables (façon feuille "choices" de Kobo) ---
+// --- Rendu du panneau des listes de choix réutilisables ---
+function renderChoiceListsPanel() {
+  const countEl = document.getElementById('choice-lists-count');
+  if (countEl) countEl.textContent = choiceLists.length > 0 ? `(${choiceLists.length})` : '';
+
+  const panel = document.getElementById('choice-lists-panel');
+  if (!panel) return;
+  panel.innerHTML = '';
+
+  if (choiceLists.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'no-condition-hint';
+    hint.textContent = "Aucune liste pour l'instant. Une liste de choix (ex : Oui/Non) peut être réutilisée par plusieurs questions à choix unique ou multiples, sans avoir à retaper les options à chaque fois.";
+    panel.appendChild(hint);
+  }
+
+  choiceLists.forEach(list => {
+    const usedBy = [];
+    sections.forEach(sec => sec.questions.forEach(q => {
+      if (q.optionsSource === 'list' && q.listUid === list.uid) usedBy.push(q.label || '(sans titre)');
+    }));
+
+    const block = document.createElement('div');
+    block.className = 'choice-list-block';
+    block.innerHTML = `
+      <div class="choice-list-header">
+        <input type="text" class="choice-list-name-input" placeholder="Nom de la liste (ex : oui_non)" value="${(list.name || '').replace(/"/g, '&quot;')}">
+        <button type="button" class="choice-list-delete-btn" title="Supprimer">🗑</button>
+      </div>
+      ${usedBy.length > 0 ? `<div class="choice-list-used-by">Utilisée par : ${usedBy.join(', ')}</div>` : ''}
+      <div class="options-editor choice-list-options"></div>
+      <button type="button" class="add-option-btn">+ Ajouter un choix</button>
+    `;
+    block.querySelector('.choice-list-name-input').addEventListener('input', (e) => {
+      list.name = e.target.value;
+      renderQuestionList(); // les questions qui utilisent cette liste affichent son nom
+    });
+    block.querySelector('.choice-list-delete-btn').addEventListener('click', () => removeChoiceList(list.uid));
+
+    const optionsContainer = block.querySelector('.choice-list-options');
+    list.options.forEach((opt, optIdx) => {
+      const optRow = document.createElement('div');
+      optRow.className = 'option-row';
+      optRow.innerHTML = `
+        <input type="text" class="option-input" placeholder="Choix ${optIdx + 1}" value="${(opt.label || '').replace(/"/g, '&quot;')}">
+        <button type="button" class="remove-option-btn" ${list.options.length <= 1 ? 'disabled' : ''}>✕</button>
+      `;
+      optRow.querySelector('.option-input').addEventListener('input', (e) => { list.options[optIdx].label = e.target.value; });
+      optRow.querySelector('.remove-option-btn').addEventListener('click', () => { list.options.splice(optIdx, 1); renderChoiceListsPanel(); });
+      optionsContainer.appendChild(optRow);
+    });
+    block.querySelector('.add-option-btn').addEventListener('click', () => { list.options.push({ label: '' }); renderChoiceListsPanel(); });
+
+    panel.appendChild(block);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.id = 'add-choice-list-btn';
+  addBtn.textContent = '+ Nouvelle liste';
+  addBtn.addEventListener('click', () => addChoiceList());
+  panel.appendChild(addBtn);
+}
+
+function renderQuestionList() {
+  const container = document.getElementById('question-list');
+  container.innerHTML = '';
+
+  sections.forEach((sec, secIndex) => {
+    const secBlock = document.createElement('div');
+    secBlock.className = 'section-block';
+    const hasCondition = (sec.relevantRules && sec.relevantRules.length > 0);
+    if (sec.conditionExpanded === undefined) sec.conditionExpanded = hasCondition;
+
+    secBlock.innerHTML = `
+      <div class="section-header">
+        <input type="text" class="section-title-input" placeholder="Titre de la section (ex : Antécédents)" value="${(sec.title || '').replace(/"/g, '&quot;')}">
+        <div class="section-actions">
+          <button type="button" class="section-condition-btn ${hasCondition ? 'active' : ''}" title="Condition d'affichage de la section">👁${hasCondition ? ` (${sec.relevantRules.length})` : ''}</button>
+          <button type="button" class="section-up-btn" title="Monter la section" ${secIndex === 0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="section-down-btn" title="Descendre la section" ${secIndex === sections.length - 1 ? 'disabled' : ''}>▼</button>
+          <button type="button" class="section-delete-btn" title="Supprimer la section">🗑</button>
+        </div>
+      </div>
+      <div class="section-condition-block advanced-block ${sec.conditionExpanded ? '' : 'hidden'}">
+        <div class="block-title">👁 Afficher cette SECTION ENTIÈRE seulement si (toutes ces conditions sont vraies) :</div>
+        <div class="rules-container"></div>
+      </div>
+      <div class="section-questions"></div>
+      <button type="button" class="add-question-in-section-btn">+ Ajouter une question ici</button>
+    `;
+    secBlock.querySelector('.section-title-input').addEventListener('input', (e) => { sec.title = e.target.value; });
+    secBlock.querySelector('.section-up-btn').addEventListener('click', () => moveSection(sec.uid, -1));
+    secBlock.querySelector('.section-down-btn').addEventListener('click', () => moveSection(sec.uid, 1));
+    secBlock.querySelector('.section-delete-btn').addEventListener('click', () => removeSection(sec.uid));
+    secBlock.querySelector('.add-question-in-section-btn').addEventListener('click', () => addQuestion(sec.uid));
+    secBlock.querySelector('.section-condition-btn').addEventListener('click', () => {
+      sec.conditionExpanded = !sec.conditionExpanded;
+      render();
+    });
+    renderConditionBlock(
+      secBlock.querySelector('.section-condition-block .rules-container'),
+      sec.relevantRules,
+      availableFieldsBeforeSection(sec.uid),
+      '+ Ajouter une condition',
+      render
+    );
+
+    const questionsContainer = secBlock.querySelector('.section-questions');
+    sec.questions.forEach((q, qIndex) => {
+      const row = document.createElement('div');
+      row.className = 'question-row' + (q.uid === selectedQuestionUid ? ' selected' : '');
+      const badges = [
+        q.required ? '<span class="mini-badge">Obligatoire</span>' : '',
+        (q.relevantRules && q.relevantRules.length) ? '<span class="mini-badge cond">🔀 Condition</span>' : '',
+        (q.alertRules && q.alertRules.length) ? '<span class="mini-badge alert">🔔 Alerte</span>' : '',
+      ].join('');
+      row.innerHTML = `
+        <span class="q-type-icon">${icon(TYPE_ICONS[q.type] || 'align-left')}</span>
+        <span class="q-label ${!q.label ? 'empty' : ''}">${q.label || '(question sans titre)'}</span>
+        <span class="q-badges">${badges}</span>
+        <span class="q-row-actions">
+          <button type="button" class="up-btn" title="Monter" ${qIndex === 0 ? 'disabled' : ''}>▲</button>
+          <button type="button" class="down-btn" title="Descendre" ${qIndex === sec.questions.length - 1 ? 'disabled' : ''}>▼</button>
+          <button type="button" class="delete-btn" title="Supprimer">🗑</button>
+        </span>
+      `;
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.q-row-actions')) return;
+        selectedQuestionUid = q.uid;
+        render();
+      });
+      row.querySelector('.up-btn').addEventListener('click', (e) => { e.stopPropagation(); moveQuestion(q.uid, -1); });
+      row.querySelector('.down-btn').addEventListener('click', (e) => { e.stopPropagation(); moveQuestion(q.uid, 1); });
+      row.querySelector('.delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm('Supprimer cette question ?')) removeQuestion(q.uid);
+      });
+      questionsContainer.appendChild(row);
+    });
+
+    container.appendChild(secBlock);
+  });
+}
+
+// --- Rendu du panneau de réglages (colonne de droite) pour la question sélectionnée ---
+function renderSettingsPanel() {
+  const panel = document.getElementById('settings-panel');
+  panel.innerHTML = '';
+
+  const found = findQuestion(selectedQuestionUid);
+  if (!found) {
+    panel.innerHTML = `<div class="settings-empty">← Sélectionne une question à gauche,<br>ou ajoutes-en une nouvelle.</div>`;
+    return;
+  }
+  const q = found.question;
+  const currentSec = found.section;
+
+  const typeOptions = Object.entries(TYPE_LABELS).map(([val, label]) => `<option value="${val}" ${q.type === val ? 'selected' : ''}>${label}</option>`).join('');
+  const sectionOptions = sections.map(s => `<option value="${s.uid}" ${s.uid === currentSec.uid ? 'selected' : ''}>${s.title || '(section sans titre)'}</option>`).join('');
+
+  const header = document.createElement('div');
+  header.innerHTML = `
+    <div class="question-header">
+      <select class="type-select">${typeOptions}</select>
+      <input type="text" class="label-input" placeholder="Intitulé de la question" value="${(q.label || '').replace(/"/g, '&quot;')}">
+    </div>
+    <div class="settings-row">
+      <input type="text" class="hint-input" placeholder="Texte d'aide sous la question (optionnel, ex : « En années révolues »)" style="flex:1;" value="${(q.hint || '').replace(/"/g, '&quot;')}">
+    </div>
+    <div class="settings-row section-move-row">
+      <label>Section : <select class="section-move-select">${sectionOptions}</select></label>
+    </div>
+    <div class="field-id-row">
+      <label>Identifiant technique (utilisé dans l'export — évite de le changer après une collecte de données)</label>
+      <input type="text" class="field-id-input" value="${q.id}">
+      <div class="field-id-warning hidden">⚠️ Déjà utilisé par une autre question — sera automatiquement corrigé à l'enregistrement.</div>
+    </div>
+  `;
+  panel.appendChild(header);
+  header.querySelector('.hint-input').addEventListener('input', (e) => { q.hint = e.target.value; });
+  header.querySelector('.section-move-select').addEventListener('change', (e) => {
+    moveQuestionToSection(q.uid, parseInt(e.target.value, 10));
+  });
+
+  function hasIdCollision(uid, id) {
+    for (const sec of sections) {
+      for (const qq of sec.questions) {
+        if (qq.uid !== uid && qq.id === id) return true;
+      }
+    }
+    return false;
+  }
+  function updateIdWarning() {
+    const warningEl = header.querySelector('.field-id-warning');
+    warningEl.classList.toggle('hidden', !hasIdCollision(q.uid, q.id));
+  }
+  const idInput = header.querySelector('.field-id-input');
+  idInput.addEventListener('input', (e) => {
+    q.id = slugify(e.target.value) || q.id;
+    q.idManuallySet = true;
+    updateIdWarning();
+    renderQuestionList();
+  });
+  idInput.addEventListener('blur', (e) => { e.target.value = q.id; });
+  updateIdWarning();
+
+  const settingsBody = document.createElement('div');
+  panel.appendChild(settingsBody);
+
+  if (q.type === 'number' || q.type === 'decimal') {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.innerHTML = `
+      <label><input type="checkbox" class="required-cb" ${q.required ? 'checked' : ''}> Obligatoire</label>
+      <label>Min <input type="number" class="min-input" value="${q.min}"></label>
+      <label>Max <input type="number" class="max-input" value="${q.max}"></label>
+      <label><input type="checkbox" class="unique-cb" ${q.unique ? 'checked' : ''}> Valeur unique (aucune autre soumission de ce formulaire ne doit avoir la même valeur — ex : numéro de téléphone, numéro de fiche)</label>
+      <label><input type="checkbox" class="age-check-cb" ${q.ageCheck ? 'checked' : ''}> Ce champ représente un âge : vérifier qu'il correspond (± 1 an) à la date de naissance du patient</label>
+    `;
+    settingsBody.appendChild(row);
+  } else if (q.type === 'text') {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.innerHTML = `
+      <label><input type="checkbox" class="required-cb" ${q.required ? 'checked' : ''}> Obligatoire</label>
+      <label><input type="checkbox" class="unique-cb" ${q.unique ? 'checked' : ''}> Valeur unique (aucune autre soumission de ce formulaire ne doit avoir la même valeur — ex : numéro de téléphone, numéro de fiche)</label>
+    `;
+    settingsBody.appendChild(row);
+
+    const patternBlock = document.createElement('div');
+    patternBlock.className = 'advanced-block';
+    patternBlock.innerHTML = `
+      <div class="block-title">✅ Format attendu (optionnel)</div>
+      <input type="text" class="pattern-input" placeholder="Expression régulière, ex : ^\\+225[0-9]{10}$" value="${(q.pattern || '').replace(/"/g, '&quot;')}">
+      <div class="formula-hint" style="margin-bottom:8px;">Exemple : téléphone ivoirien → <code>^\\+225[0-9]{10}$</code></div>
+      <input type="text" class="pattern-message-input" placeholder="Message si le format ne correspond pas (ex : Format invalide, utilisez +225...)" value="${(q.patternMessage || '').replace(/"/g, '&quot;')}">
+    `;
+    settingsBody.appendChild(patternBlock);
+    patternBlock.querySelector('.pattern-input').addEventListener('input', (e) => { q.pattern = e.target.value; });
+    patternBlock.querySelector('.pattern-message-input').addEventListener('input', (e) => { q.patternMessage = e.target.value; });
+  } else if (q.type === 'date') {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.innerHTML = `
+      <label><input type="checkbox" class="required-cb" ${q.required ? 'checked' : ''}> Obligatoire</label>
+      <label style="display:block; margin-top:8px;"><input type="checkbox" class="next-visit-cb" ${q.nextVisitMarker ? 'checked' : ''}> Utiliser comme date de prochaine visite (pour le tableau de bord Suivi)</label>
+    `;
+    settingsBody.appendChild(row);
+    row.querySelector('.next-visit-cb').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        // Un seul champ "prochaine visite" par formulaire : décoche les autres.
+        for (const sec of sections) {
+          for (const qq of sec.questions) {
+            if (qq.uid !== q.uid) qq.nextVisitMarker = false;
+          }
+        }
+      }
+      q.nextVisitMarker = e.target.checked;
+    });
+  } else if (q.type === 'boolean') {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.innerHTML = `
+      <label><input type="checkbox" class="required-cb" ${q.required ? 'checked' : ''}> Obligatoire</label>
+      <label style="display:block; margin-top:8px;"><input type="checkbox" class="referral-cb" ${q.triggersReferral ? 'checked' : ''}> Champ S/N-S (Suivi/Non-Suivi) — propose de créer un dossier de suivi quand la réponse est "Oui"</label>
+    `;
+    settingsBody.appendChild(row);
+    row.querySelector('.referral-cb').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        // Un seul champ S/N-S par formulaire : décoche les autres.
+        for (const sec of sections) {
+          for (const qq of sec.questions) {
+            if (qq.uid !== q.uid) qq.triggersReferral = false;
+          }
+        }
+      }
+      q.triggersReferral = e.target.checked;
+    });
+  } else if (q.type === 'select_one' || q.type === 'select_multiple') {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.innerHTML = `<label><input type="checkbox" class="required-cb" ${q.required ? 'checked' : ''}> Obligatoire</label>`;
+    settingsBody.appendChild(row);
+
+    const sourceRow = document.createElement('div');
+    sourceRow.className = 'settings-row';
+    const listOptionsHtml = choiceLists.map(l => `<option value="${l.uid}" ${q.listUid === l.uid ? 'selected' : ''}>${l.name || '(liste sans nom)'}</option>`).join('');
+    sourceRow.innerHTML = `
+      <label>Choix : <select class="options-source-select">
+        <option value="inline" ${q.optionsSource !== 'list' ? 'selected' : ''}>Définir ici</option>
+        ${choiceLists.length > 0 ? `<option value="list" ${q.optionsSource === 'list' ? 'selected' : ''} disabled hidden></option>` : ''}
+        ${choiceLists.map(l => `<option value="list:${l.uid}" ${q.optionsSource === 'list' && q.listUid === l.uid ? 'selected' : ''}>Liste : ${l.name || '(liste sans nom)'}</option>`).join('')}
+      </select></label>
+    `;
+    settingsBody.appendChild(sourceRow);
+    sourceRow.querySelector('.options-source-select').addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val === 'inline') {
+        q.optionsSource = 'inline';
+        q.listUid = null;
+        if (!q.options || q.options.length === 0) q.options = [{ label: '' }];
+      } else if (val.startsWith('list:')) {
+        q.optionsSource = 'list';
+        q.listUid = parseInt(val.split(':')[1], 10);
+      }
+      render();
+    });
+
+    if (q.optionsSource === 'list') {
+      const listNote = document.createElement('p');
+      listNote.className = 'no-condition-hint';
+      const list = choiceLists.find(l => l.uid === q.listUid);
+      listNote.textContent = list
+        ? `Utilise la liste "${list.name || '(sans nom)'}" (${list.options.filter(o=>o.label).length} choix) — modifiable dans "📋 Listes de choix réutilisables" en haut.`
+        : "Liste introuvable — choisis-en une autre.";
+      settingsBody.appendChild(listNote);
+    } else {
+    const optionsEditor = document.createElement('div');
+    optionsEditor.className = 'options-editor';
+    q.options.forEach((opt, optIdx) => {
+      const optRow = document.createElement('div');
+      optRow.className = 'option-row';
+      optRow.innerHTML = `
+        <input type="text" class="option-input" placeholder="Choix ${optIdx + 1}" value="${(opt.label || '').replace(/"/g, '&quot;')}">
+        <button type="button" class="remove-option-btn" ${q.options.length <= 1 ? 'disabled' : ''}>✕</button>
+      `;
+      optRow.querySelector('.option-input').addEventListener('input', (e) => { q.options[optIdx].label = e.target.value; renderQuestionList(); });
+      optRow.querySelector('.remove-option-btn').addEventListener('click', () => { q.options.splice(optIdx, 1); renderSettingsPanel(); });
+      optionsEditor.appendChild(optRow);
+    });
+    const addOptBtn = document.createElement('button');
+    addOptBtn.type = 'button';
+    addOptBtn.className = 'add-option-btn';
+    addOptBtn.textContent = '+ Ajouter un choix';
+    addOptBtn.addEventListener('click', () => { q.options.push({ label: '' }); renderSettingsPanel(); });
+    optionsEditor.appendChild(addOptBtn);
+    settingsBody.appendChild(optionsEditor);
+    }
+  } else if (q.type === 'calculated') {
+    const availableIds = availableFieldsBefore(q.uid).map(f => f.id);
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.innerHTML = `<input type="text" class="formula-input" placeholder="ex : poids / pow(taille / 100, 2)" value="${(q.formula || '').replace(/"/g, '&quot;')}">`;
+    settingsBody.appendChild(row);
+    const hint = document.createElement('div');
+    hint.className = 'formula-hint';
+    hint.textContent = availableIds.length > 0
+      ? `Champs disponibles : ${availableIds.join(', ')} — opérations : + - * / pow(x,y) sqrt(x) abs(x) round(x,n) if(cond,si_vrai,si_faux) selected(champ,'valeur') coalesce(a,b,...)`
+      : "Ajoute d'abord d'autres questions au-dessus.";
+    settingsBody.appendChild(hint);
+  } else if (['image', 'audio', 'video', 'file', 'signature'].includes(q.type)) {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.innerHTML = `<label><input type="checkbox" class="required-cb" ${q.required ? 'checked' : ''}> Obligatoire</label>`;
+    settingsBody.appendChild(row);
+
+    const hint = document.createElement('div');
+    hint.className = 'formula-hint';
+    const hints = {
+      image: "L'agent pourra prendre une photo directement (mobile) ou en importer une depuis l'appareil. Formats courants (jpg, png…), 25 Mo maximum.",
+      audio: "L'agent pourra enregistrer un audio directement (mobile) ou en importer un. 25 Mo maximum.",
+      video: "L'agent pourra filmer directement (mobile) ou importer une vidéo. 25 Mo maximum — les vidéos longues peuvent dépasser cette limite, à garder en tête sur une connexion lente.",
+      file: "N'importe quel type de fichier (PDF, document scanné…). 25 Mo maximum.",
+      signature: "Un pavé de dessin s'affiche à la saisie (souris ou doigt sur mobile) — signature simple, sauvegardée comme une image. Pas une signature électronique légale/certifiée.",
+    };
+    hint.textContent = hints[q.type];
+    settingsBody.appendChild(hint);
+  }
+
+  const availableFields = availableFieldsBefore(q.uid);
+
+  const relevantBlock = document.createElement('div');
+  relevantBlock.className = 'advanced-block';
+  relevantBlock.innerHTML = `<div class="block-title">👁 Afficher cette question seulement si (toutes ces conditions sont vraies) :</div><div class="rules-container"></div>`;
+  settingsBody.appendChild(relevantBlock);
+  renderConditionBlock(relevantBlock.querySelector('.rules-container'), q.relevantRules, availableFields, '+ Ajouter une condition', render);
+
+  const alertBlock = document.createElement('div');
+  alertBlock.className = 'advanced-block';
+  alertBlock.innerHTML = `
+    <div class="block-title">🔔 Générer une alerte si (toutes ces conditions sont vraies) :</div>
+    <div class="rules-container"></div>
+    <div class="alert-extra-row">
+      <input type="text" class="alert-message-input" placeholder="Message affiché (ex : Orienter vers un médecin)" value="${(q.alertMessage || '').replace(/"/g, '&quot;')}">
+      <select class="alert-severity-select">
+        <option value="low" ${q.alertSeverity === 'low' ? 'selected' : ''}>Faible</option>
+        <option value="medium" ${q.alertSeverity === 'medium' ? 'selected' : ''}>Moyenne</option>
+        <option value="high" ${q.alertSeverity === 'high' ? 'selected' : ''}>Élevée</option>
+        <option value="critical" ${q.alertSeverity === 'critical' ? 'selected' : ''}>Critique</option>
+      </select>
+    </div>
+  `;
+  settingsBody.appendChild(alertBlock);
+  renderConditionBlock(alertBlock.querySelector('.rules-container'), q.alertRules, availableFields, '+ Ajouter une condition', render);
+  alertBlock.querySelector('.alert-message-input').addEventListener('input', (e) => { q.alertMessage = e.target.value; });
+  alertBlock.querySelector('.alert-severity-select').addEventListener('change', (e) => { q.alertSeverity = e.target.value; });
+
+  header.querySelector('.type-select').addEventListener('change', (e) => {
+    q.type = e.target.value;
+    if ((q.type === 'select_one' || q.type === 'select_multiple') && (!q.options || q.options.length === 0)) q.options = [{ label: '' }];
+    render();
+  });
+  header.querySelector('.label-input').addEventListener('input', (e) => {
+    q.label = e.target.value;
+    if (!q.idManuallySet) {
+      computeFieldIds();
+      header.querySelector('.field-id-input').value = q.id;
+    }
+    renderQuestionList();
+  });
+
+  const requiredCb = settingsBody.querySelector('.required-cb');
+  if (requiredCb) requiredCb.addEventListener('change', (e) => { q.required = e.target.checked; renderQuestionList(); });
+  const uniqueCb = settingsBody.querySelector('.unique-cb');
+  if (uniqueCb) uniqueCb.addEventListener('change', (e) => { q.unique = e.target.checked; });
+  const ageCheckCb = settingsBody.querySelector('.age-check-cb');
+  if (ageCheckCb) ageCheckCb.addEventListener('change', (e) => { q.ageCheck = e.target.checked; });
+  const minInput = settingsBody.querySelector('.min-input');
+  if (minInput) minInput.addEventListener('input', (e) => { q.min = e.target.value; });
+  const maxInput = settingsBody.querySelector('.max-input');
+  if (maxInput) maxInput.addEventListener('input', (e) => { q.max = e.target.value; });
+  const formulaInput = settingsBody.querySelector('.formula-input');
+  if (formulaInput) formulaInput.addEventListener('input', (e) => { q.formula = e.target.value; });
+}
+
+function render() {
+  computeFieldIds();
+  renderChoiceListsPanel();
+  renderQuestionList();
+  renderSettingsPanel();
+}
+
+function getChoiceListName(uid) {
+  const list = choiceLists.find(l => l.uid === uid);
+  return list ? (slugify(list.name) || `liste_${list.uid}`) : '';
+}
+
+function availableFieldsBeforeSection(sectionUid) {
+  computeFieldIds();
+  const list = [];
+  for (const sec of sections) {
+    if (sec.uid === sectionUid) break;
+    for (const q of sec.questions) {
+      if (q.type !== 'note') list.push({ id: q.id, label: q.label || q.id, type: q.type, options: resolveQuestionOptions(q) });
+    }
+  }
+  return list;
+}
+
+function buildFieldObject(q) {
+  const field = { id: q.id, type: q.type, label: q.label || q.id };
+  if (q.hint && q.hint.trim() !== '') field.hint = q.hint.trim();
+  if (q.required) field.required = true;
+  if (q.type === 'number' || q.type === 'decimal') {
+    const validation = {};
+    if (q.min !== '' && q.min !== null) validation.min = parseFloat(q.min);
+    if (q.max !== '' && q.max !== null) validation.max = parseFloat(q.max);
+    if (q.unique) validation.unique = true;
+    if (q.ageCheck) validation.check_against_dob = true;
+    if (Object.keys(validation).length > 0) field.validation = validation;
+  }
+  if (q.type === 'text' && q.pattern && q.pattern.trim() !== '') {
+    field.validation = field.validation || {};
+    field.validation.pattern = q.pattern.trim();
+    if (q.patternMessage && q.patternMessage.trim() !== '') field.validation.pattern_message = q.patternMessage.trim();
+  }
+  if (q.type === 'text' && q.unique) {
+    field.validation = field.validation || {};
+    field.validation.unique = true;
+  }
+  if (q.type === 'select_one' || q.type === 'select_multiple') {
+    if (q.optionsSource === 'list' && q.listUid !== null && q.listUid !== undefined) {
+      field.list_name = getChoiceListName(q.listUid);
+    } else {
+      field.options = q.options.filter(o => o.label && o.label.trim() !== '').map(o => ({ value: o.value || slugify(o.label), label: o.label }));
+    }
+  }
+  if (q.type === 'calculated') field.formula = q.formula || '';
+  if (q.type === 'date' && q.nextVisitMarker) field.next_visit_marker = true;
+  if (q.type === 'boolean' && q.triggersReferral) field.triggers_referral = true;
+  const relevantStr = rulesToConditionString(q.relevantRules || []);
+  if (relevantStr) field.relevant = relevantStr;
+  const alertStr = rulesToConditionString(q.alertRules || []);
+  if (alertStr) { field.alert_if = alertStr; field.alert_message = q.alertMessage || ''; field.alert_severity = q.alertSeverity || 'medium'; }
+  return field;
+}
+
+function buildDefinition() {
+  computeFieldIds();
+  const definition = {
+    sections: sections.map((sec, idx) => {
+      const sectionObj = {
+        id: slugify(sec.title) || `section_${idx + 1}`,
+        title: sec.title || `Section ${idx + 1}`,
+        fields: sec.questions.map(q => buildFieldObject(q)),
+      };
+      const sectionRelevant = rulesToConditionString(sec.relevantRules || []);
+      if (sectionRelevant) sectionObj.relevant = sectionRelevant;
+      return sectionObj;
+    }),
+  };
+
+  const choiceListsOutput = {};
+  choiceLists.forEach(list => {
+    const validOptions = (list.options || []).filter(o => o.label && o.label.trim() !== '');
+    if (list.name && list.name.trim() !== '' && validOptions.length > 0) {
+      choiceListsOutput[getChoiceListName(list.uid)] = validOptions.map(o => ({ value: slugify(o.label), label: o.label }));
+    }
+  });
+  if (Object.keys(choiceListsOutput).length > 0) definition.choice_lists = choiceListsOutput;
+
+  return definition;
+}
+
+document.getElementById('add-section-btn').addEventListener('click', () => addSection());
+document.getElementById('toggle-choice-lists-btn').addEventListener('click', () => {
+  document.getElementById('choice-lists-panel').classList.toggle('hidden');
+});
+
+document.getElementById('save-btn').addEventListener('click', async () => {
+  const name = document.getElementById('form-name').value.trim();
+  const statusEl = document.getElementById('save-status');
+  if (!name) { alert("Donne un nom au formulaire avant de l'enregistrer."); return; }
+  const totalQuestions = sections.reduce((sum, s) => sum + s.questions.length, 0);
+  if (totalQuestions === 0) { alert("Ajoute au moins une question avant d'enregistrer."); return; }
+
+  const definition = buildDefinition();
+  const formType = document.getElementById('form-type-select').value;
+  let res;
+  if (formId) {
+    res = await fetch(`/api/forms/${formId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ name, form_type: formType, definition }) });
+  } else {
+    res = await fetch('/api/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ project_id: currentProjectId, name, form_type: formType, definition }) });
+  }
+  if (res.status === 401) { window.location.href = '/login.html'; return; }
+  if (res.ok) {
+    // Une fois enregistrées, les questions sont "commises" : leurs identifiants
+    // ne doivent plus jamais changer tout seuls si on reformule le libellé plus tard.
+    sections.forEach(sec => sec.questions.forEach(qq => { qq.idManuallySet = true; }));
+    statusEl.textContent = 'Enregistré ✓';
+    if (!formId) window.location.href = `/project_hub.html?project_id=${currentProjectId}`;
+  } else {
+    alert("Erreur lors de l'enregistrement du formulaire.");
+  }
+});
+
+// --- Mode aperçu ---
+document.getElementById('mode-build-btn').addEventListener('click', () => {
+  document.getElementById('mode-build-btn').classList.add('active');
+  document.getElementById('mode-preview-btn').classList.remove('active');
+  document.getElementById('build-view').classList.remove('hidden');
+  document.getElementById('preview-view').classList.add('hidden');
+});
+document.getElementById('mode-preview-btn').addEventListener('click', () => {
+  document.getElementById('mode-preview-btn').classList.add('active');
+  document.getElementById('mode-build-btn').classList.remove('active');
+  document.getElementById('build-view').classList.add('hidden');
+  document.getElementById('preview-view').classList.remove('hidden');
+  renderPreview();
+});
+
+function previewFieldValues() {
+  const values = {};
+  document.querySelectorAll('#preview-form [data-field-id]').forEach(el => {
+    if (el.dataset.type === 'select_multiple') {
+      const checked = el.querySelectorAll('input[type="checkbox"]:checked');
+      values[el.dataset.fieldId] = Array.from(checked).map(cb => cb.value);
+    } else if (el.tagName === 'SELECT' && el.multiple) {
+      values[el.dataset.fieldId] = Array.from(el.selectedOptions).map(o => o.value);
+    } else {
+      values[el.dataset.fieldId] = el.value;
+    }
+  });
+  return values;
+}
+function previewRecomputeCalculated() {
+  const values = previewFieldValues();
+  document.querySelectorAll('#preview-form [data-calculated="true"]').forEach(el => {
+    try {
+      const result = evaluateFormula(el.dataset.formula, values);
+      if (typeof result === 'number') {
+        el.value = Number.isFinite(result) ? Math.round(result * 100) / 100 : '';
+      } else if (typeof result === 'string') {
+        el.value = result;
+      } else if (typeof result === 'boolean') {
+        el.value = result ? 'Oui' : 'Non';
+      } else {
+        el.value = '';
+      }
+    } catch (e) { el.value = ''; }
+  });
+}
+function previewRecomputeConditions() {
+  const values = previewFieldValues();
+
+  const sectionVisibility = new Map();
+  document.querySelectorAll('#preview-form .section').forEach(sectionEl => {
+    let visible = true;
+    if (sectionEl.dataset.relevant) {
+      try { visible = truthy(evaluateFormula(sectionEl.dataset.relevant, values)); } catch (e) { visible = true; }
+    }
+    sectionEl.style.display = visible ? '' : 'none';
+    sectionVisibility.set(sectionEl, visible);
+  });
+
+  document.querySelectorAll('#preview-form .field').forEach(el => {
+    const parentSection = el.closest('.section');
+    const sectionVisible = parentSection ? sectionVisibility.get(parentSection) !== false : true;
+    let ownVisible = true;
+    if (el.dataset.relevant) {
+      try { ownVisible = truthy(evaluateFormula(el.dataset.relevant, values)); } catch (e) { ownVisible = true; }
+    }
+    el.style.display = (sectionVisible && ownVisible) ? '' : 'none';
+  });
+
+  const activeAlerts = [];
+  document.querySelectorAll('#preview-form [data-alert-if]').forEach(el => {
+    const parentSection = el.closest('.section');
+    const sectionVisible = parentSection ? sectionVisibility.get(parentSection) !== false : true;
+    if (!sectionVisible) return;
+    let triggered = false;
+    try { triggered = truthy(evaluateFormula(el.dataset.alertIf, values)); } catch (e) { triggered = false; }
+    if (triggered) activeAlerts.push({ message: el.dataset.alertMessage || 'Alerte', severity: el.dataset.alertSeverity || 'medium' });
+  });
+  const box = document.getElementById('preview-alerts');
+  if (box) box.innerHTML = activeAlerts.map(a => `<div class="alert-banner severity-${a.severity}">⚠️ ${a.message}</div>`).join('');
+}
+
+function renderPreview() {
+  const definition = buildDefinition();
+  const container = document.getElementById('preview-form');
+  container.innerHTML = '<div id="preview-alerts"></div>';
+  const choiceListsMap = definition.choice_lists || {};
+
+  definition.sections.forEach(section => {
+    const sectionEl = document.createElement('div');
+    sectionEl.className = 'section';
+    if (section.relevant) sectionEl.dataset.relevant = section.relevant;
+    sectionEl.innerHTML = `<h2 style="font-size:1rem;color:var(--ink-muted);">${section.title}</h2>`;
+
+    section.fields.forEach(field => {
+      const fieldEl = document.createElement('div');
+      fieldEl.className = 'field';
+      if (field.relevant) fieldEl.dataset.relevant = field.relevant;
+      if (field.alert_if) {
+        fieldEl.dataset.alertIf = field.alert_if;
+        fieldEl.dataset.alertMessage = field.alert_message || '';
+        fieldEl.dataset.alertSeverity = field.alert_severity || 'medium';
+      }
+      const requiredAttr = field.required ? 'required' : '';
+      const hintHtml = field.hint ? `<div class="field-hint">${field.hint}</div>` : '';
+      const fieldOptions = (field.list_name && choiceListsMap[field.list_name]) ? choiceListsMap[field.list_name] : (field.options || []);
+      let inputHtml = '';
+      if (field.type === 'calculated') {
+        inputHtml = `<input type="text" data-field-id="${field.id}" data-calculated="true" data-formula="${(field.formula || '').replace(/"/g, '&quot;')}" readonly>`;
+      } else if (field.type === 'select_one') {
+        const options = fieldOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+        inputHtml = `<select data-field-id="${field.id}" ${requiredAttr}><option value="">--</option>${options}</select>`;
+      } else if (field.type === 'select_multiple') {
+        const checkboxes = fieldOptions.map(o => `
+          <label class="checkbox-option">
+            <input type="checkbox" value="${o.value}">
+            <span>${o.label}</span>
+          </label>
+        `).join('');
+        fieldEl.innerHTML = `
+          <label>${field.label}${field.required ? ' *' : ''}</label>${hintHtml}
+          <div class="checkbox-group" data-field-id="${field.id}" data-type="select_multiple">${checkboxes}</div>
+        `;
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else if (field.type === 'boolean') {
+        inputHtml = `<select data-field-id="${field.id}" ${requiredAttr}><option value="">--</option><option value="true">Oui</option><option value="false">Non</option></select>`;
+      } else if (field.type === 'date') {
+        inputHtml = `<input type="date" data-field-id="${field.id}" ${requiredAttr}>`;
+      } else if (field.type === 'number') {
+        inputHtml = `<input type="number" step="1" data-field-id="${field.id}" ${requiredAttr}>`;
+      } else if (field.type === 'decimal') {
+        inputHtml = `<input type="number" step="any" data-field-id="${field.id}" ${requiredAttr}>`;
+      } else if (field.type === 'note') {
+        fieldEl.innerHTML = `<p style="color:var(--ink-muted); font-style:italic;">${field.label}</p>`;
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else {
+        inputHtml = `<input type="text" data-field-id="${field.id}" ${requiredAttr}>`;
+      }
+      fieldEl.innerHTML = `<label>${field.label}${field.required ? ' *' : ''}</label>${hintHtml}${inputHtml}`;
+      sectionEl.appendChild(fieldEl);
+    });
+    container.appendChild(sectionEl);
+  });
+
+  container.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('input', () => { previewRecomputeCalculated(); previewRecomputeConditions(); });
+    el.addEventListener('change', () => { previewRecomputeCalculated(); previewRecomputeConditions(); });
+  });
+  previewRecomputeCalculated();
+  previewRecomputeConditions();
+}
+
+/* ── Lien communautaire (point 7) ── */
+async function initPublicLinkPanel(fid) {
+  const card = document.getElementById('public-link-card');
+  const toggle = document.getElementById('public-link-toggle');
+  const res = await fetch(`/api/forms/${fid}/public-link`, { credentials: 'same-origin' });
+  if (!res.ok) return; // reste caché si l'appel échoue (pas bloquant pour le reste du constructeur)
+  card.style.display = 'block';
+  const status = await res.json();
+  toggle.checked = status.enabled;
+  renderPublicLinkBody(status, null);
+
+  toggle.addEventListener('change', async () => {
+    const wanted = toggle.checked;
+    toggle.disabled = true;
+    const r = await fetch(`/api/forms/${fid}/public-link`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ enabled: wanted }),
+    });
+    toggle.disabled = false;
+    if (!r.ok) { toggle.checked = !wanted; alert('Impossible de modifier le lien communautaire.'); return; }
+    const data = await r.json();
+    renderPublicLinkBody(data, data.code);
+  });
+}
+
+function renderPublicLinkBody(status, freshCode) {
+  const body = document.getElementById('public-link-body');
+  if (!status.enabled) {
+    body.innerHTML = `<p style="margin:0;">Désactivé — les agents communautaires ne peuvent pas accéder à ce formulaire sans compte.</p>`;
+    return;
+  }
+  const link = `${window.location.origin}/community.html?form_id=${formId}`;
+  let html = `
+    <p style="margin:0 0 8px 0;">Lien à partager avec les agents communautaires :</p>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+      <input type="text" readonly value="${link}" style="flex:1; font-size:0.8rem;" onclick="this.select()">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="copyPublicLink('${link}')">Copier</button>
+    </div>
+  `;
+  if (freshCode) {
+    html += `
+      <div class="alert-banner severity-medium" style="margin-bottom:10px;">
+        <strong>Code d'accès : ${freshCode}</strong><br>
+        Note-le maintenant — il ne sera plus jamais réaffiché en clair après avoir quitté cette page.
+        Partage-le aux agents (idéalement par un autre canal que le lien lui-même, ex : SMS séparé).
+      </div>
+    `;
+  } else if (status.has_code) {
+    html += `<p style="margin:0 0 10px 0;">Un code d'accès existe déjà (impossible à réafficher). Régénère-en un nouveau si besoin de le revoir ou en cas de doute sur une fuite — cela coupe immédiatement l'accès à tous les appareils déjà connectés avec l'ancien code.</p>`;
+  }
+  html += `<button type="button" class="btn btn-secondary btn-sm" onclick="regeneratePublicLinkCode()">🔄 Régénérer le code d'accès</button>`;
+  body.innerHTML = html;
+}
+
+async function regeneratePublicLinkCode() {
+  if (!confirm("Régénérer le code va couper l'accès à tous les agents déjà connectés avec l'ancien code. Continuer ?")) return;
+  const res = await fetch(`/api/forms/${formId}/public-link/regenerate`, { method: 'POST', credentials: 'same-origin' });
+  if (!res.ok) { alert('Impossible de régénérer le code.'); return; }
+  const data = await res.json();
+  renderPublicLinkBody(data, data.code);
+}
+
+function copyPublicLink(link) {
+  if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => alert('Lien copié.')).catch(() => {});
+}
+
+(async () => {
+  const user = await initAppShell(currentProjectId);
+  if (!user) return;
+
+  if (user.role !== 'admin') {
+    document.body.innerHTML = `
+      <div style="max-width:520px; margin:80px auto; text-align:center; font-family: system-ui, sans-serif;">
+        <p style="font-size:1.05rem;">🔒 La création et la modification de formulaires sont réservées aux administrateurs.</p>
+        <a href="/">← Retour à l'accueil</a>
+      </div>`;
+    return;
+  }
+
+  if (formId) {
+    document.getElementById('page-title').textContent = 'Modifier le formulaire';
+    document.getElementById('breadcrumb-form').textContent = 'Modifier';
+    const res = await fetch(`/api/forms/${formId}`, { credentials: 'same-origin' });
+    if (!res.ok) { document.body.innerHTML = '<p style="padding:40px;">Formulaire introuvable. <a href="/">Retour</a></p>'; return; }
+    const form = await res.json();
+    currentProjectId = form.project_id;
+    document.getElementById('form-name').value = form.name;
+    document.getElementById('form-type-select').value = form.form_type || 'survey';
+    document.getElementById('breadcrumb-project').href = `/project_hub.html?project_id=${currentProjectId}`;
+    const projRes = await fetch(`/api/projects/${currentProjectId}`, { credentials: 'same-origin' });
+    if (projRes.ok) document.getElementById('breadcrumb-project').textContent = (await projRes.json()).name;
+
+    // D'abord les listes de choix réutilisables, pour pouvoir ensuite relier
+    // chaque question qui en utilise une à la bonne liste (par uid interne).
+    const loadedChoiceLists = form.definition.choice_lists || {};
+    const listNameToUid = {};
+    choiceLists = Object.entries(loadedChoiceLists).map(([listName, options]) => {
+      const uid = choiceListUidCounter++;
+      listNameToUid[listName] = uid;
+      return { uid, name: listName, options: (options || []).map(o => ({ label: o.label })) };
+    });
+
+    const loadedSections = form.definition.sections || [];
+    sections = loadedSections.map(sec => ({
+      uid: sectionUidCounter++,
+      title: sec.title || '',
+      relevantRules: parseConditionToRules(sec.relevant || ''),
+      questions: (sec.fields || []).map(f => makeQuestionFromField(f, listNameToUid)),
+    }));
+    if (sections.length === 0) sections = [{ uid: sectionUidCounter++, title: '', questions: [], relevantRules: [] }];
+
+    selectedQuestionUid = null;
+    outer:
+    for (const sec of sections) {
+      for (const q of sec.questions) { selectedQuestionUid = q.uid; break outer; }
+    }
+    render();
+    document.getElementById('warning-box').classList.remove('hidden');
+    initPublicLinkPanel(formId);
+  } else {
+    if (!currentProjectId) { document.body.innerHTML = '<p style="padding:40px;">Aucun projet indiqué. <a href="/">Retour</a></p>'; return; }
+    document.getElementById('breadcrumb-project').href = `/project_hub.html?project_id=${currentProjectId}`;
+    document.getElementById('breadcrumb-form').textContent = 'Nouveau formulaire';
+    const projRes = await fetch(`/api/projects/${currentProjectId}`, { credentials: 'same-origin' });
+    if (projRes.ok) document.getElementById('breadcrumb-project').textContent = (await projRes.json()).name;
+
+    const sec = addSection();
+    addQuestion(sec.uid);
+  }
+})();
+</script>
+
+<script>
+// --- Mini-évaluateur de formules (identique à submission.html / backend/formula_engine.py) ---
+function tokenize(expr) {
+  const tokens = [];
+  let i = 0;
+  while (i < expr.length) {
+    const c = expr[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (/[0-9.]/.test(c)) { let num=''; while (i<expr.length && /[0-9.]/.test(expr[i])) { num+=expr[i]; i++; } tokens.push({type:'number',value:parseFloat(num)}); continue; }
+    if (/[a-zA-Z_]/.test(c)) { let id=''; while (i<expr.length && /[a-zA-Z0-9_]/.test(expr[i])) { id+=expr[i]; i++; } tokens.push({type:'ident',value:id}); continue; }
+    if (c === "'" || c === '"') { const q=c; i++; let s=''; while (i<expr.length && expr[i]!==q) { s+=expr[i]; i++; } i++; tokens.push({type:'string',value:s}); continue; }
+    if (c === '=' && expr[i+1] === '=') { tokens.push({type:'op',value:'=='}); i+=2; continue; }
+    if (c === '!' && expr[i+1] === '=') { tokens.push({type:'op',value:'!='}); i+=2; continue; }
+    if (c === '<' && expr[i+1] === '=') { tokens.push({type:'op',value:'<='}); i+=2; continue; }
+    if (c === '>' && expr[i+1] === '=') { tokens.push({type:'op',value:'>='}); i+=2; continue; }
+    if ('+-*/(),<>'.includes(c)) { tokens.push({type:'op',value:c}); i++; continue; }
+    throw new Error(`Caractère non autorisé : "${c}"`);
+  }
+  return tokens;
+}
+const NUMERIC_FUNCTIONS = { pow:(a,b)=>Math.pow(a,b), sqrt:(a)=>Math.sqrt(a), abs:(a)=>Math.abs(a), round:(a,n=0)=>{const f=Math.pow(10,n);return Math.round(a*f)/f;} };
+const GENERIC_FUNCTIONS = {
+  if: (condition, trueVal, falseVal) => truthy(condition) ? trueVal : falseVal,
+  selected: (value, target) => {
+    if (Array.isArray(value)) return value.map(String).includes(String(target));
+    if (value === null || value === undefined) return false;
+    return String(value) === String(target);
+  },
+  coalesce: (...args) => {
+    for (const a of args) {
+      if (a !== null && a !== undefined && a !== '' && !(Array.isArray(a) && a.length === 0)) return a;
+    }
+    return args.length ? args[args.length - 1] : null;
+  },
+};
+function toNumber(v) { if (v===null||v===undefined) return NaN; if (typeof v==='boolean') throw new Error("valeur oui/non dans un calcul"); const n=parseFloat(v); if (isNaN(n)&&v!=='') throw new Error(`Valeur non numérique : "${v}"`); return n; }
+function tryToNumber(v) { if (v===null||v===undefined||typeof v==='boolean') return null; const n=parseFloat(v); return isNaN(n)?null:n; }
+function truthy(v) { if (typeof v==='boolean') return v; if (v===null||v===undefined) return false; if (typeof v==='number') return !isNaN(v)&&v!==0; if (typeof v==='string') return v.trim()!==''; return !!v; }
+function compareValues(op,left,right) {
+  if (left===null||left===undefined||right===null||right===undefined) {
+    if (op==='==') return left===right;
+    if (op==='!=') return left!==right;
+    return false;
+  }
+  const l2=tryToNumber(left), r2=tryToNumber(right); let l,r;
+  if (l2!==null && r2!==null) { l=l2; r=r2; } else { l=String(left); r=String(right); }
+  switch(op){case '==':return l===r;case '!=':return l!==r;case '<':return l<r;case '>':return l>r;case '<=':return l<=r;case '>=':return l>=r;}
+  throw new Error(`Opérateur inconnu : ${op}`);
+}
+function evaluateFormula(formula, values) {
+  const tokens = tokenize(formula); let pos=0;
+  const peek=()=>tokens[pos]; const advance=()=>tokens[pos++];
+  function resolveIdent(name) { if (name==='true') return true; if (name==='false') return false; if (!(name in values)) throw new Error(`Champ inconnu : ${name}`); const v=values[name]; return v===''?null:v; }
+  function parsePrimary() {
+    const t=peek(); if (!t) throw new Error('Formule incomplète');
+    if (t.type==='number') { advance(); return t.value; }
+    if (t.type==='string') { advance(); return t.value; }
+    if (t.type==='ident') {
+      if (t.value==='and'||t.value==='or'||t.value==='not') throw new Error(`'${t.value}' inattendu ici`);
+      advance();
+      if (peek() && peek().value==='(') {
+        advance(); const args=[];
+        if (peek() && peek().value!==')') { args.push(parseOr()); while (peek() && peek().value===',') { advance(); args.push(parseOr()); } }
+        if (!peek()||peek().value!==')') throw new Error('Parenthèse manquante'); advance();
+        const fn = NUMERIC_FUNCTIONS[t.value];
+        if (fn) return fn(...args.map(toNumber));
+        const genFn = GENERIC_FUNCTIONS[t.value];
+        if (genFn) return genFn(...args);
+        throw new Error(`Fonction non autorisée : ${t.value}`);
+      }
+      return resolveIdent(t.value);
+    }
+    if (t.value==='(') { advance(); const v=parseOr(); if (!peek()||peek().value!==')') throw new Error('Parenthèse manquante'); advance(); return v; }
+    if (t.value==='-') { advance(); return -toNumber(parsePrimary()); }
+    throw new Error('Formule invalide');
+  }
+  function parseMulDiv() { let v=parsePrimary(); while (peek() && (peek().value==='*'||peek().value==='/')) { const op=advance().value; const rhs=parsePrimary(); v = op==='*' ? toNumber(v)*toNumber(rhs) : toNumber(v)/toNumber(rhs); } return v; }
+  function parseAddSub() { let v=parseMulDiv(); while (peek() && (peek().value==='+'||peek().value==='-')) { const op=advance().value; const rhs=parseMulDiv(); v = op==='+' ? toNumber(v)+toNumber(rhs) : toNumber(v)-toNumber(rhs); } return v; }
+  function parseComparison() { const v=parseAddSub(); if (peek() && ['==','!=','<','>','<=','>='].includes(peek().value)) { const op=advance().value; const rhs=parseAddSub(); return compareValues(op,v,rhs); } return v; }
+  function parseNot() { if (peek() && peek().type==='ident' && peek().value==='not') { advance(); return !truthy(parseNot()); } return parseComparison(); }
+  function parseAnd() { let v=parseNot(); while (peek() && peek().type==='ident' && peek().value==='and') { advance(); const rhs=parseNot(); v=truthy(v)&&truthy(rhs); } return v; }
+  function parseOr() { let v=parseAnd(); while (peek() && peek().type==='ident' && peek().value==='or') { advance(); const rhs=parseAnd(); v=truthy(v)||truthy(rhs); } return v; }
+  const result=parseOr(); if (pos<tokens.length) throw new Error('Formule invalide (caractères en trop)'); return result;
+}
+</script>
+
+</body>
+</html>

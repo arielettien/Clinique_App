@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doublons potentiels — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { display: flex; align-items: center; gap: var(--space-2); }
+  .dup-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4); }
+  .dup-pair { display: flex; gap: var(--space-4); align-items: stretch; }
+  .dup-patient { flex: 1; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); }
+  .dup-patient h4 { margin: 0 0 6px 0; }
+  .dup-patient p { margin: 2px 0; font-size: 0.85rem; color: var(--ink-muted); }
+  .dup-vs { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--ink-faint); padding: 0 var(--space-2); }
+  .dup-actions { margin-top: var(--space-3); display: flex; gap: 8px; }
+  .empty-state { text-align: center; padding: var(--space-6); color: var(--ink-muted); }
+  .error-msg { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.9rem; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb"><a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="#">Projet</a> / <span>Doublons potentiels</span></div>
+    <h1><span class="icon-slot" data-icon="users"></span> Doublons potentiels</h1>
+    <p style="color:var(--ink-muted); margin-bottom:var(--space-4);">
+      Patients partageant le même prénom et nom, détectés après la synchronisation d'une fiche créée hors-ligne
+      (impossible de vérifier contre toute la base sans réseau au moment de la création).
+      Rien n'est fusionné automatiquement — à toi de vérifier s'il s'agit vraiment de la même personne.
+    </p>
+
+    <div id="error-box" class="error-msg hidden"></div>
+    <div id="dup-list"><p style="color:var(--ink-muted);">Chargement…</p></div>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const projectId = params.get('project_id');
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function formatDob(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; }
+function formatDateTime(d) { return new Date(d).toLocaleString('fr-FR'); }
+
+function patientCard(p, label) {
+  return `
+    <div class="dup-patient">
+      <h4>${escapeHtml(p.first_name)} ${escapeHtml(p.last_name)}</h4>
+      <p>Né(e) le : ${formatDob(p.date_of_birth)}</p>
+      <p>Téléphone : ${escapeHtml(p.phone || '—')}</p>
+      <p>Fiche créée : ${formatDateTime(p.created_at)}</p>
+      <a href="/history.html?patient_id=${p.id}" style="font-size:0.82rem;">Voir son historique</a>
+    </div>
+  `;
+}
+
+async function loadDuplicates() {
+  const res = await fetch(`/api/projects/${projectId}/potential-duplicates`, { credentials: 'same-origin' });
+  if (!res.ok) {
+    document.getElementById('error-box').textContent = "Impossible de charger les doublons potentiels.";
+    document.getElementById('error-box').classList.remove('hidden');
+    return;
+  }
+  const dups = await res.json();
+  const wrap = document.getElementById('dup-list');
+  if (!dups.length) {
+    wrap.innerHTML = '<div class="empty-state"><span class="icon-slot" data-icon="circle-check" style="font-size:2rem;"></span><p>Aucun doublon potentiel pour l\'instant.</p></div>';
+    renderIconSlots(wrap);
+    return;
+  }
+  wrap.innerHTML = dups.map(d => `
+    <div class="dup-card" data-dup-id="${d.id}">
+      <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:0;">Détecté le ${formatDateTime(d.detected_at)}</p>
+      <div class="dup-pair">
+        ${patientCard(d.patient_a)}
+        <div class="dup-vs">≟</div>
+        ${patientCard(d.patient_b)}
+      </div>
+      <div class="dup-actions">
+        <button class="btn btn-secondary btn-sm" onclick="dismissDup('${d.id}')">Ce n'est pas un doublon — écarter</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function dismissDup(dupId) {
+  const res = await fetch(`/api/potential-duplicates/${dupId}/dismiss`, { method: 'POST', credentials: 'same-origin' });
+  if (res.ok) {
+    document.querySelector(`[data-dup-id="${dupId}"]`).remove();
+    if (!document.querySelector('.dup-card')) loadDuplicates();
+  }
+}
+
+(async () => {
+  if (!projectId) {
+    document.querySelector('.app-main').innerHTML = '<p>Aucun projet sélectionné. <a href="/">Retour</a></p>';
+    return;
+  }
+  // Lien "retour" fonctionnel DÈS MAINTENANT (project_id est déjà connu via
+  // l'adresse) — ne pas attendre un appel réseau qui pourrait échouer.
+  document.getElementById('breadcrumb-project').href = `/project_hub.html?project_id=${projectId}`;
+  const projRes = await fetch(`/api/projects/${projectId}`, { credentials: 'same-origin' }).catch(() => null);
+  if (projRes && projRes.ok) {
+    const project = await projRes.json();
+    document.getElementById('breadcrumb-project').textContent = project.name;
+  }
+  try { await initAppShell(projectId); } catch (e) { console.warn('initAppShell non disponible', e); }
+  await loadDuplicates();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nouvelle consultation — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { font-size: 1.35rem; margin: 4px 0 4px 0; }
+  .section { margin-bottom: 18px; }
+  .section h2 { font-size:1rem; margin-top:0; color: var(--ink-muted); }
+  .field { margin-bottom:14px; }
+
+  .media-field { display: flex; flex-direction: column; gap: 8px; }
+  .media-preview:empty { display: none; }
+  .media-preview img { max-width: 240px; max-height: 240px; border-radius: 8px; border: 1px solid var(--border, #E2E8E6); display: block; }
+  .media-preview audio { width: 100%; max-width: 320px; }
+  .media-preview video { border-radius: 8px; border: 1px solid var(--border, #E2E8E6); }
+  .media-file-link { display: inline-flex; align-items: center; gap: 6px; color: var(--primary, #2095F3); text-decoration: none; }
+  .media-file-link:hover { text-decoration: underline; }
+  .media-remove-btn {
+    display: inline-flex; align-items: center; gap: 4px; width: fit-content; font-size: 0.8rem;
+    color: #B91C1C; background: none; border: none; cursor: pointer; padding: 2px 0; margin-top: 4px;
+  }
+  .media-file-input { font-size: 0.85rem; }
+  .media-status { font-size: 0.82rem; color: var(--ink-muted, #5B6B6E); }
+  .signature-canvas {
+    width: 100%; height: 160px; border: 1px solid var(--border-strong, #CBD5D3); border-radius: 8px;
+    background: #fff; touch-action: none; cursor: crosshair;
+  }
+  .signature-actions { display: flex; justify-content: flex-end; }
+  .field label { display:block; font-size:0.88rem; margin-bottom:4px; }
+  .field input, .field select { width:100%; box-sizing:border-box; }
+  .field input[readonly] { background: var(--surface-muted); color: var(--ink-muted); }
+  .field-hint { font-size: 0.8rem; color: var(--ink-faint); margin: -2px 0 6px 0; }
+  .checkbox-group { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .checkbox-option { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; font-weight: 400; cursor: pointer; }
+  .checkbox-option input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+  .form-choice-list { list-style:none; padding:0; }
+  .form-choice-list li { margin-bottom: 8px; }
+  .form-choice-list a { display:block; }
+  .post-submit-actions { display:flex; gap:10px; margin-top: 4px; }
+  .patient-match-list { margin: -6px 0 14px 0; display:flex; flex-direction:column; gap:6px; }
+  .patient-match-item {
+    display:block; width:100%; text-align:left; box-sizing:border-box;
+    padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius-sm);
+    background:var(--surface); color:var(--ink); font-size:0.85rem; cursor:pointer;
+  }
+  .patient-match-item:hover { border-color:var(--primary); background:var(--primary-soft); }
+  .patient-match-item span { color: var(--ink-muted); }
+  #patient-selected-banner .alert-banner { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+<div class="breadcrumb"><a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="/">…</a> / <span id="breadcrumb-action">Consultation</span></div>
+<h1 id="page-title">Nouvelle consultation</h1>
+<p id="patient-name" style="color:var(--ink-muted);"></p>
+
+<p id="global-error" class="alert-banner severity-critical hidden"></p>
+<p id="success-message" class="alert-banner severity-low hidden" style="font-weight:600;"></p>
+<div id="post-submit-actions" class="post-submit-actions hidden"></div>
+<div id="server-alerts"></div>
+
+<div id="form-chooser" class="hidden">
+  <p>Choisis le formulaire à remplir :</p>
+  <ul class="form-choice-list" id="form-choice-list"></ul>
+</div>
+
+<div id="live-alerts"></div>
+<form id="clinical-form"></form>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const patientId = params.get('patient_id');
+let formId = params.get('form_id');
+const projectId = params.get('project_id');
+const editSubmissionId = params.get('submission_id');
+const caseIdParam = params.get('case_id');
+
+const isSurveyMode = !patientId && !caseIdParam;
+
+let currentForm = null;
+let isOfflineForm = false; // true si le formulaire a été chargé depuis le cache local (hors ligne)
+
+// Vérification simple avant de tenter une action qui a structurellement besoin
+// du serveur (créer un nouveau patient) — navigator.onLine seul n'est pas
+// parfaitement fiable, mais suffit ici pour éviter à l'agent de remplir tout
+// un formulaire avant de découvrir que ça ne peut pas aboutir hors-ligne.
+// La tentative réseau elle-même reste de toute façon protégée par un essai/
+// récupération (try/catch) juste après.
+function isOnlineNow() {
+  return typeof navigator !== 'undefined' ? navigator.onLine : true;
+}
+let selectedPatientId = null;
+let prefillResponses = null;
+let casePatientId = null;   // patient_id résolu depuis le cas, quand on arrive via ?case_id=
+let caseInfo = null;
+let expectedUpdatedAt = null;  // valeur vue au chargement, pour détecter une modification simultanée (mode édition)
+
+// Jeton d'idempotence (point M6) : généré une seule fois à l'ouverture d'un
+// formulaire vierge. Si la même soumission est envoyée deux fois avec ce
+// même jeton (double-clic très rapide, requête rejouée par le réseau), le
+// serveur renvoie le résultat déjà enregistré au lieu d'en créer un second —
+// une vraie nouvelle visite (après avoir cliqué "+ Nouvelle") reçoit son
+// propre jeton frais, donc n'est jamais bloquée à tort.
+function generateIdempotencyKey() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  return 'idk-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+let currentIdempotencyKey = generateIdempotencyKey();
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function formatDob(dob) {
+  if (!dob) return '';
+  const parts = String(dob).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dob;
+}
+
+// Âge en mois tant que l'enfant a moins de 5 ans (usage nutrition : "0 ans"
+// n'est d'aucune utilité pour un bébé de quelques mois, l'âge en mois est ce
+// qui compte réellement en dépistage nutritionnel jusqu'à 5 ans).
+function computeAge(dob) {
+  if (!dob) return '—';
+  const birth = new Date(dob);
+  const now = new Date();
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years < 5) return `${years * 12 + months} mois`;
+  return `${years} ans`;
+}
+
+function prefillFormValues(responses) {
+  document.querySelectorAll('[data-field-id]').forEach(el => {
+    const fid = el.dataset.fieldId;
+    if (!(fid in responses)) return;
+    const value = responses[fid];
+    if (el.dataset.type === 'select_multiple') {
+      const selected = Array.isArray(value) ? value.map(String) : [];
+      el.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = selected.includes(cb.value);
+      });
+    } else if (el.dataset.mediaType && value) {
+      el.value = value;
+      renderMediaPreview(fid, el.dataset.mediaType, value, null);
+    } else {
+      el.value = (value === null || value === undefined) ? '' : value;
+    }
+  });
+}
+
+let patientSearchTimeout = null;
+
+function triggerPatientSearch() {
+  clearTimeout(patientSearchTimeout);
+  patientSearchTimeout = setTimeout(runPatientSearch, 350);
+}
+
+async function runPatientSearch() {
+  const resultsEl = document.getElementById('patient-match-results');
+  if (!resultsEl) return;
+  const firstName = document.getElementById('patient-first-name').value.trim();
+  const lastName = document.getElementById('patient-last-name').value.trim();
+  const query = `${firstName} ${lastName}`.trim();
+
+  if (query.length < 2 || !currentForm || !currentForm.project_id) {
+    resultsEl.innerHTML = '';
+    return;
+  }
+
+  let matches;
+  let fromCache = false;
+  try {
+    const res = await fetch(`/api/patients?project_id=${currentForm.project_id}&search=${encodeURIComponent(query)}`, { credentials: 'same-origin' });
+    if (!res.ok) { resultsEl.innerHTML = ''; return; }
+    matches = await res.json();
+  } catch (netErr) {
+    // Hors ligne : on cherche dans les patients déjà mis en cache pour ce
+    // projet, plutôt que de ne montrer aucun résultat sans explication —
+    // sans ça, l'agent croirait à tort qu'aucun patient ne correspond.
+    if (!window.getCachedPatients) { resultsEl.innerHTML = ''; return; }
+    const cached = await getCachedPatients(currentForm.project_id);
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    matches = cached.filter(p => {
+      const full = `${p.first_name} ${p.last_name}`.toLowerCase();
+      return terms.every(t => full.includes(t));
+    });
+    fromCache = true;
+  }
+
+  if (!matches.length) {
+    resultsEl.innerHTML = fromCache
+      ? '<p class="field-hint">Hors ligne — aucun patient déjà connu ne correspond parmi ceux déjà consultés sur cet appareil.</p>'
+      : '';
+    return;
+  }
+
+  resultsEl.innerHTML = `
+    <p class="field-hint">${fromCache ? 'Hors ligne — parmi les patients déjà consultés sur cet appareil : ' : ''}Patient(s) déjà enregistré(s) qui pourraient correspondre — clique pour rattacher au lieu de créer une nouvelle fiche :</p>
+    <div class="patient-match-list">
+      ${matches.map(p => `
+        <button type="button" class="patient-match-item" data-patient-id="${p.id}">
+          ${escapeHtml(p.first_name)} ${escapeHtml(p.last_name)}${p.date_of_birth ? `<span> · né(e) le ${formatDob(p.date_of_birth)}</span>` : ''}${p.phone ? `<span> · ${escapeHtml(p.phone)}</span>` : ''}
+        </button>
+      `).join('')}
+    </div>
+  `;
+  resultsEl.querySelectorAll('.patient-match-item').forEach(btn => {
+    btn.addEventListener('click', () => selectExistingPatient(btn.dataset.patientId, matches));
+  });
+}
+
+function selectExistingPatient(patientId, matches) {
+  const patient = matches.find(p => p.id === patientId);
+  if (!patient) return;
+  selectedPatientId = patientId;
+
+  document.getElementById('patient-match-results').innerHTML = '';
+
+  // On pré-remplit avec les infos actuelles de la fiche plutôt que de la
+  // cacher — l'opérateur peut corriger un téléphone périmé, une faute de
+  // frappe, etc. avant de valider.
+  document.getElementById('patient-first-name').value = patient.first_name || '';
+  document.getElementById('patient-last-name').value = patient.last_name || '';
+  document.getElementById('patient-dob').value = patient.date_of_birth || '';
+  document.getElementById('patient-sex').value = patient.sex || '';
+  document.getElementById('patient-phone').value = patient.phone || '';
+
+  const banner = document.getElementById('patient-selected-banner');
+  banner.classList.remove('hidden');
+  banner.innerHTML = `
+    <div class="alert-banner severity-low">
+      <span>Patient sélectionné : <strong>${escapeHtml(patient.first_name)} ${escapeHtml(patient.last_name)}</strong> — corrige ses informations ci-dessous si besoin.</span>
+      <button type="button" class="btn btn-ghost btn-sm" id="patient-change-btn">Changer de patient</button>
+    </div>
+  `;
+  document.getElementById('patient-change-btn').addEventListener('click', clearPatientSelection);
+}
+
+function clearPatientSelection() {
+  selectedPatientId = null;
+  const banner = document.getElementById('patient-selected-banner');
+  if (banner) { banner.classList.add('hidden'); banner.innerHTML = ''; }
+  ['patient-first-name', 'patient-last-name', 'patient-dob', 'patient-sex', 'patient-phone'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const results = document.getElementById('patient-match-results');
+  if (results) results.innerHTML = '';
+  const firstNameEl = document.getElementById('patient-first-name');
+  if (firstNameEl) firstNameEl.focus();
+}
+
+function fieldValues() {
+  const values = {};
+  document.querySelectorAll('[data-field-id]').forEach(el => {
+    if (el.dataset.type === 'select_multiple') {
+      const checked = el.querySelectorAll('input[type="checkbox"]:checked');
+      values[el.dataset.fieldId] = Array.from(checked).map(cb => cb.value);
+    } else if (el.tagName === 'SELECT' && el.multiple) {
+      values[el.dataset.fieldId] = Array.from(el.selectedOptions).map(o => o.value);
+    } else {
+      values[el.dataset.fieldId] = el.value;
+    }
+  });
+  return values;
+}
+
+const MEDIA_ACCEPT = { image: 'image/*', audio: 'audio/*', video: 'video/*', file: '*/*' };
+const MEDIA_CAPTURE = { image: ' capture="environment"', audio: '', video: ' capture="environment"', file: '' };
+const MEDIA_LABEL_VERB = { image: 'une photo', audio: 'un enregistrement audio', video: 'une vidéo', file: 'un fichier' };
+
+function renderMediaFieldHtml(field, requiredAttr, hintHtml) {
+  const accept = MEDIA_ACCEPT[field.type] || '*/*';
+  const capture = MEDIA_CAPTURE[field.type] || '';
+  return `
+    <label>${field.label}${field.required ? ' *' : ''}</label>${hintHtml}
+    <div class="media-field">
+      <input type="hidden" data-field-id="${field.id}" data-media-type="${field.type}" ${requiredAttr} value="">
+      <div class="media-preview" id="media-preview-${field.id}"></div>
+      <input type="file" accept="${accept}"${capture} class="media-file-input"
+             onchange="handleMediaFileSelect('${field.id}', '${field.type}', this)">
+      <div class="media-status" id="media-status-${field.id}"></div>
+    </div>
+  `;
+}
+
+function mediaPreviewInner(fieldType, mediaId, filename, objectUrl) {
+  const src = objectUrl || (mediaId ? `/api/media/${mediaId}` : '');
+  if (fieldType === 'image') return `<img src="${src}" alt="${filename || 'Photo'}">`;
+  if (fieldType === 'signature') return `<img src="${src}" alt="Signature" style="max-height:90px; background:#fff; border:1px solid var(--border, #E2E8E6); border-radius:8px;">`;
+  if (fieldType === 'audio') return `<audio controls src="${src}"></audio>`;
+  if (fieldType === 'video') return `<video controls src="${src}" style="max-width:280px;"></video>`;
+  return `<a href="${src}" target="_blank" class="media-file-link">${window.icon ? icon('paperclip') : '📎'} ${filename || 'Fichier'}</a>`;
+}
+
+function renderMediaPreview(fieldId, fieldType, mediaId, filename) {
+  const box = document.getElementById(`media-preview-${fieldId}`);
+  if (!box) return;
+  box.innerHTML = mediaPreviewInner(fieldType, mediaId, filename, null) + `
+    <button type="button" class="media-remove-btn" onclick="clearMediaField('${fieldId}')">${window.icon ? icon('x') : '✕'} Retirer</button>
+  `;
+}
+
+function clearMediaField(fieldId) {
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+  if (hidden) hidden.value = '';
+  const box = document.getElementById(`media-preview-${fieldId}`);
+  if (box) box.innerHTML = '';
+  const status = document.getElementById(`media-status-${fieldId}`);
+  if (status) status.textContent = '';
+}
+
+async function handleMediaFileSelect(fieldId, fieldType, inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const status = document.getElementById(`media-status-${fieldId}`);
+  const box = document.getElementById(`media-preview-${fieldId}`);
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+
+  // Aperçu immédiat (avant même la fin de l'envoi) pour un retour visuel rapide.
+  const objectUrl = URL.createObjectURL(file);
+  if (box) box.innerHTML = mediaPreviewInner(fieldType, null, file.name, objectUrl);
+  if (status) status.textContent = 'Envoi en cours…';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('field_type', fieldType);
+
+  try {
+    const res = await fetch('/api/media/upload', { method: 'POST', body: formData, credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (status) status.textContent = extractApiError(data, "Échec de l'envoi.");
+      return;
+    }
+    if (hidden) hidden.value = data.id;
+    if (status) status.textContent = '';
+    renderMediaPreview(fieldId, fieldType, data.id, data.original_filename);
+    recomputeCalculatedFields();
+    recomputeConditions();
+  } catch (e) {
+    // Hors ligne : le fichier est enregistré tel quel sur cet appareil (pas
+    // juste une référence) — il sera réellement envoyé au serveur au moment
+    // de la synchronisation, avant la soumission qui le référence.
+    if (!window.storeMediaOffline) {
+      if (status) status.textContent = "Échec de l'envoi (connexion). Réessaie.";
+      return;
+    }
+    const localId = await storeMediaOffline(file, fieldType, file.name, file.type);
+    if (hidden) hidden.value = localId;
+    if (status) status.textContent = 'Enregistré localement — sera envoyé au retour du réseau.';
+    if (box) box.innerHTML = mediaPreviewInner(fieldType, null, file.name, objectUrl) + `
+      <button type="button" class="media-remove-btn" onclick="clearMediaField('${fieldId}')">${window.icon ? icon('x') : '✕'} Retirer</button>
+    `;
+    if (window.updateOnlineIndicator) updateOnlineIndicator();
+    recomputeCalculatedFields();
+    recomputeConditions();
+  }
+}
+
+/* ── Champ Signature : pavé de dessin, envoyé comme une image via le même
+   circuit que les autres champs média (/api/media/upload, field_type
+   "signature" — voir main.py, même validation qu'une image). ── */
+
+function renderSignatureFieldHtml(field, requiredAttr, hintHtml) {
+  return `
+    <label>${field.label}${field.required ? ' *' : ''}</label>${hintHtml}
+    <div class="media-field">
+      <input type="hidden" data-field-id="${field.id}" data-media-type="signature" ${requiredAttr} value="">
+      <div class="media-preview" id="media-preview-${field.id}"></div>
+      <canvas class="signature-canvas" id="signature-canvas-${field.id}" data-canvas-id="${field.id}"></canvas>
+      <div class="signature-actions">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="clearSignatureCanvas('${field.id}')">Effacer le tracé</button>
+      </div>
+      <div class="media-status" id="media-status-${field.id}"></div>
+    </div>
+  `;
+}
+
+const signatureCanvasState = {};   // fieldId -> { ctx, drawing, lastX, lastY, hasDrawn }
+const signatureUploadTimers = {};
+
+function initSignatureCanvas(fieldId) {
+  const canvas = document.getElementById(`signature-canvas-${fieldId}`);
+  if (!canvas || signatureCanvasState[fieldId]) return; // déjà initialisé
+
+  // Résolution interne du canevas = sa taille réellement affichée (×2 pour
+  // un tracé net sur écran haute densité) — sinon le tracé ne suit pas
+  // exactement le doigt/curseur si la largeur diffère de la valeur par défaut.
+  const ratio = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(rect.width * ratio));
+  canvas.height = Math.max(1, Math.round(rect.height * ratio));
+  const ctx = canvas.getContext('2d');
+  ctx.scale(ratio, ratio);
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1C2B2E';
+
+  const state = { ctx, drawing: false, lastX: 0, lastY: 0, hasDrawn: false };
+  signatureCanvasState[fieldId] = state;
+
+  const pointFromEvent = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - r.left, y: p.clientY - r.top };
+  };
+  const start = (e) => {
+    e.preventDefault();
+    const p = pointFromEvent(e);
+    state.drawing = true; state.lastX = p.x; state.lastY = p.y;
+  };
+  const move = (e) => {
+    if (!state.drawing) return;
+    e.preventDefault();
+    const p = pointFromEvent(e);
+    state.ctx.beginPath();
+    state.ctx.moveTo(state.lastX, state.lastY);
+    state.ctx.lineTo(p.x, p.y);
+    state.ctx.stroke();
+    state.lastX = p.x; state.lastY = p.y;
+    state.hasDrawn = true;
+  };
+  const end = () => {
+    if (!state.drawing) return;
+    state.drawing = false;
+    clearTimeout(signatureUploadTimers[fieldId]);
+    // Léger délai après le dernier trait, pour ne pas envoyer une signature
+    // à moitié tracée entre deux traits rapprochés.
+    signatureUploadTimers[fieldId] = setTimeout(() => uploadSignature(fieldId), 600);
+  };
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+}
+
+async function uploadSignature(fieldId) {
+  const canvas = document.getElementById(`signature-canvas-${fieldId}`);
+  const state = signatureCanvasState[fieldId];
+  if (!canvas || !state || !state.hasDrawn) return;
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+  const status = document.getElementById(`media-status-${fieldId}`);
+  if (status) status.textContent = 'Envoi en cours…';
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  const formData = new FormData();
+  formData.append('file', blob, `signature_${fieldId}.png`);
+  formData.append('field_type', 'signature');
+
+  try {
+    const res = await fetch('/api/media/upload', { method: 'POST', body: formData, credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (status) status.textContent = extractApiError(data, "Échec de l'envoi de la signature.");
+      return;
+    }
+    if (hidden) hidden.value = data.id;
+    if (status) status.textContent = 'Signature enregistrée ✓';
+    recomputeCalculatedFields();
+    recomputeConditions();
+  } catch (e) {
+    // Hors ligne : même principe que les autres champs média — la signature
+    // (déjà dessinée à l'écran) est stockée telle quelle sur cet appareil,
+    // envoyée réellement au serveur seulement à la synchronisation.
+    if (!window.storeMediaOffline) {
+      if (status) status.textContent = "Échec de l'envoi (connexion). La signature reste affichée mais pas encore enregistrée.";
+      return;
+    }
+    const localId = await storeMediaOffline(blob, 'signature', `signature_${fieldId}.png`, 'image/png');
+    if (hidden) hidden.value = localId;
+    if (status) status.textContent = 'Enregistrée localement — sera envoyée au retour du réseau.';
+    if (window.updateOnlineIndicator) updateOnlineIndicator();
+    recomputeCalculatedFields();
+    recomputeConditions();
+  }
+}
+
+function clearSignatureCanvas(fieldId) {
+  const canvas = document.getElementById(`signature-canvas-${fieldId}`);
+  const state = signatureCanvasState[fieldId];
+  if (canvas && state) {
+    state.ctx.clearRect(0, 0, canvas.width, canvas.height);
+    state.hasDrawn = false;
+  }
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+  if (hidden) hidden.value = '';
+  const status = document.getElementById(`media-status-${fieldId}`);
+  if (status) status.textContent = '';
+}
+
+function showReferralPrompt(referral, suggestedCollectedAt) {
+  if (!referral || !referral.suggest_referral) return;
+  const box = document.createElement('div');
+  box.className = 'alert-banner severity-medium';
+  box.style.marginTop = '12px';
+  // Pré-rempli avec la date de CE dépistage (déjà choisie plus haut dans le
+  // formulaire) — dans la grande majorité des cas c'est la bonne date
+  // d'inscription au suivi, mais reste modifiable puisque ce n'est qu'une
+  // suggestion, pas une contrainte.
+  const prefill = suggestedCollectedAt ? new Date(suggestedCollectedAt).toISOString().slice(0, 10) : '';
+  box.innerHTML = `
+    <p style="margin:0 0 8px 0;">Ce patient remplit les critères de suivi (S/N-S = Oui).</p>
+    <div class="field" style="margin-bottom:8px;">
+      <label style="display:block; font-size:0.82rem; color:var(--ink-muted); margin-bottom:4px;">Date réelle d'inscription (optionnel, laisser vide = aujourd'hui)</label>
+      <input type="date" id="referral-case-enrolled-date" style="max-width:220px;" value="${prefill}">
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" id="btn-create-referral-case">Créer son dossier de suivi maintenant</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-dismiss-referral">Plus tard</button>
+  `;
+  document.getElementById('success-message').insertAdjacentElement('afterend', box);
+  box.querySelector('#btn-dismiss-referral').addEventListener('click', () => box.remove());
+  box.querySelector('#btn-create-referral-case').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    e.target.textContent = 'Création…';
+    const enrolledDate = document.getElementById('referral-case-enrolled-date').value;
+    const casePayload = { project_id: currentForm.project_id || projectId, patient_id: referral.patient_id };
+    if (enrolledDate) casePayload.enrolled_at = enrolledDate;
+    try {
+      const res = await fetch('/api/cases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(casePayload),
+      });
+      if (res.ok) {
+        const newCase = await res.json();
+        box.innerHTML = `<p style="margin:0;">Dossier ${escapeHtml(newCase.case_number)} créé. <a href="/case_detail.html?case_id=${newCase.id}" style="font-weight:600;">Ouvrir le dossier</a></p>`;
+      } else {
+        const data = await res.json().catch(() => ({}));
+        box.innerHTML = `<p style="margin:0;">${escapeHtml(extractApiError(data, "Impossible de créer le dossier."))}</p>`;
+      }
+    } catch (netErr) {
+      if (window.createCaseOffline) {
+        const newCase = await createCaseOffline({ projectId: currentForm.project_id || projectId, patientId: referral.patient_id, enrolledAt: enrolledDate || null });
+        if (window.updateOnlineIndicator) updateOnlineIndicator();
+        box.innerHTML = `<p style="margin:0;">Dossier créé en local — sera envoyé au retour du réseau. <a href="/case_detail.html?case_id=${newCase.id}" style="font-weight:600;">Ouvrir</a></p>`;
+      } else {
+        box.innerHTML = `<p style="margin:0;">Hors ligne — réessaie une fois reconnecté.</p>`;
+      }
+    }
+  });
+}
+
+function round(x, n) {
+  const f = Math.pow(10, n);
+  return Math.round(x * f) / f;
+}
+
+function truthy(v) {
+  if (typeof v === 'boolean') return v;
+  if (v === null || v === undefined) return false;
+  // NaN est intentionnellement considéré "vrai" ici, pour correspondre EXACTEMENT
+  // au moteur Python (`nan != 0` vaut True en Python) — un calcul JS et un calcul
+  // serveur sur les mêmes données doivent toujours donner le même résultat,
+  // y compris dans ce cas limite (champ vide utilisé dans un calcul numérique).
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') return v.trim() !== '';
+  return !!v;
+}
+
+function recomputeCalculatedFields() {
+  const values = fieldValues();
+  document.querySelectorAll('[data-calculated="true"]').forEach(el => {
+    try {
+      const result = evaluateFormula(el.dataset.formula, values);
+      if (typeof result === 'number') {
+        el.value = Number.isFinite(result) ? round(result, 2) : '';
+      } else if (typeof result === 'string') {
+        el.value = result;
+      } else if (typeof result === 'boolean') {
+        el.value = result ? 'Oui' : 'Non';
+      } else {
+        el.value = '';
+      }
+    } catch (e) {
+      el.value = '';
+    }
+  });
+}
+
+function recomputeConditions() {
+  const values = fieldValues();
+
+  const sectionVisibility = new Map();
+  document.querySelectorAll('.section').forEach(sectionEl => {
+    let visible = true;
+    if (sectionEl.dataset.relevant) {
+      try { visible = truthy(evaluateFormula(sectionEl.dataset.relevant, values)); }
+      catch (e) { visible = true; }
+    }
+    sectionEl.style.display = visible ? '' : 'none';
+    sectionVisibility.set(sectionEl, visible);
+  });
+
+  document.querySelectorAll('.field').forEach(el => {
+    const parentSection = el.closest('.section');
+    const sectionVisible = parentSection ? sectionVisibility.get(parentSection) !== false : true;
+
+    let ownVisible = true;
+    if (el.dataset.relevant) {
+      try { ownVisible = truthy(evaluateFormula(el.dataset.relevant, values)); }
+      catch (e) { ownVisible = true; }
+    }
+
+    const finalVisible = sectionVisible && ownVisible;
+    el.style.display = finalVisible ? '' : 'none';
+
+    const input = el.querySelector('[data-field-id]');
+    if (input) {
+      input.required = finalVisible && input.dataset.originallyRequired === '1';
+    }
+  });
+
+  const activeAlerts = [];
+  document.querySelectorAll('[data-alert-if]').forEach(el => {
+    const parentSection = el.closest('.section');
+    const sectionVisible = parentSection ? sectionVisibility.get(parentSection) !== false : true;
+    if (!sectionVisible) return;
+
+    let triggered = false;
+    try {
+      triggered = truthy(evaluateFormula(el.dataset.alertIf, values));
+    } catch (e) {
+      triggered = false;
+    }
+    if (triggered) {
+      activeAlerts.push({
+        message: el.dataset.alertMessage || `Alerte sur ${el.dataset.alertLabel}`,
+        severity: el.dataset.alertSeverity || 'medium',
+      });
+    }
+  });
+  renderLiveAlerts(activeAlerts);
+}
+
+function renderLiveAlerts(alerts) {
+  const box = document.getElementById('live-alerts');
+  box.innerHTML = alerts.map(a =>
+    `<div class="alert-banner severity-${a.severity}">⚠️ ${a.message}</div>`
+  ).join('');
+}
+
+function resolveOptions(field, choiceLists) {
+  if (field.list_name && choiceLists && choiceLists[field.list_name]) {
+    return choiceLists[field.list_name];
+  }
+  return field.options || [];
+}
+
+function renderForm(form) {
+  currentForm = form;
+  document.getElementById('page-title').textContent = form.name;
+  const container = document.getElementById('clinical-form');
+  container.innerHTML = '';
+  const choiceLists = form.definition.choice_lists || {};
+
+  // Date de cet événement (point 6) : visible dans tous les modes, pré-remplie
+  // à aujourd'hui (création) ou à la date déjà enregistrée (édition). Permet
+  // une vraie saisie rétroactive directe, sans détour créer-puis-éditer.
+  const dateSection = document.createElement('div');
+  dateSection.className = 'section';
+  dateSection.id = 'event-date-section';
+  dateSection.innerHTML = `
+    <div class="field">
+      <label>Date de ${editSubmissionId ? 'cette soumission' : (caseIdParam ? 'cette visite' : (isSurveyMode ? 'ce dépistage' : 'cette consultation'))}</label>
+      <input type="date" id="event-date" required>
+    </div>
+  `;
+  container.appendChild(dateSection);
+  const eventDateInput = () => document.getElementById('event-date');
+  if (prefillResponses === null) {
+    eventDateInput().value = new Date().toISOString().slice(0, 10);
+  }
+
+  // Mode Enquête : aucun patient_id fourni dans l'URL -> on doit en identifier
+  // un avant de pouvoir soumettre, puisque /api/submissions exige toujours un
+  // patient_id. On propose d'abord une recherche parmi les patients déjà
+  // enregistrés dans ce projet (par prénom/nom) ; si rien n'est sélectionné,
+  // on crée un nouveau patient à la soumission.
+  // En mode édition (correction d'une soumission existante), le patient est
+  // déjà fixé — ce bloc n'a pas lieu d'être.
+  if (isSurveyMode && !editSubmissionId) {
+    selectedPatientId = null;
+    const patientSection = document.createElement('div');
+    patientSection.className = 'section';
+    patientSection.id = 'patient-id-section';
+    patientSection.innerHTML = `
+      <h2>Patient</h2>
+      <div id="patient-selected-banner" class="hidden"></div>
+      <div id="patient-fields-wrap">
+        <div class="field">
+          <label>Prénom *</label>
+          <input type="text" id="patient-first-name" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Nom *</label>
+          <input type="text" id="patient-last-name" required autocomplete="off">
+        </div>
+        <div id="patient-match-results"></div>
+        <div class="field">
+          <label>Date de naissance</label>
+          <input type="date" id="patient-dob">
+          <div id="patient-age-hint" style="font-size:0.78rem; color:var(--ink-faint); margin-top:4px;"></div>
+        </div>
+        <div class="field">
+          <label>Sexe</label>
+          <select id="patient-sex"><option value="">--</option><option value="M">M</option><option value="F">F</option></select>
+        </div>
+        <div class="field">
+          <label>Téléphone</label>
+          <input type="text" id="patient-phone">
+        </div>
+      </div>
+    `;
+    container.appendChild(patientSection);
+    document.getElementById('patient-first-name').addEventListener('input', triggerPatientSearch);
+    document.getElementById('patient-last-name').addEventListener('input', triggerPatientSearch);
+    // Âge affiché en direct sous la date de naissance, dès qu'elle est
+    // renseignée — jamais envoyé au serveur, juste un repère pendant la saisie.
+    document.getElementById('patient-dob').addEventListener('input', (e) => {
+      document.getElementById('patient-age-hint').textContent = e.target.value ? `Âge calculé : ${computeAge(e.target.value)}` : '';
+    });
+  }
+
+  form.definition.sections.forEach(section => {
+    const sectionEl = document.createElement('div');
+    sectionEl.className = 'section';
+    if (section.relevant) sectionEl.dataset.relevant = section.relevant;
+    sectionEl.innerHTML = `<h2>${section.title}</h2>`;
+
+    section.fields.forEach(field => {
+      const fieldEl = document.createElement('div');
+      fieldEl.className = 'field';
+      if (field.relevant) fieldEl.dataset.relevant = field.relevant;
+      if (field.alert_if) {
+        fieldEl.dataset.alertIf = field.alert_if;
+        fieldEl.dataset.alertMessage = field.alert_message || '';
+        fieldEl.dataset.alertSeverity = field.alert_severity || 'medium';
+        fieldEl.dataset.alertLabel = field.label || field.id;
+      }
+
+      const requiredAttr = field.required ? 'required data-originally-required="1"' : '';
+      const hintHtml = field.hint ? `<div class="field-hint">${field.hint}</div>` : '';
+      let inputHtml = '';
+
+      if (field.type === 'calculated') {
+        inputHtml = `<input type="text" data-field-id="${field.id}" data-calculated="true" data-formula="${(field.formula || '').replace(/"/g, '&quot;')}" readonly>`;
+      } else if (field.type === 'select_one') {
+        const options = resolveOptions(field, choiceLists).map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+        inputHtml = `<select data-field-id="${field.id}" ${requiredAttr}><option value="">--</option>${options}</select>`;
+      } else if (field.type === 'select_multiple') {
+        const checkboxes = resolveOptions(field, choiceLists).map(o => `
+          <label class="checkbox-option">
+            <input type="checkbox" value="${o.value}">
+            <span>${o.label}</span>
+          </label>
+        `).join('');
+        fieldEl.innerHTML = `
+          <label>${field.label}${field.required ? ' *' : ''}</label>${hintHtml}
+          <div class="checkbox-group" data-field-id="${field.id}" data-type="select_multiple">${checkboxes}</div>
+        `;
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else if (field.type === 'boolean') {
+        inputHtml = `<select data-field-id="${field.id}" ${requiredAttr}><option value="">--</option><option value="true">Oui</option><option value="false">Non</option></select>`;
+      } else if (field.type === 'date') {
+        inputHtml = `<input type="date" data-field-id="${field.id}" ${requiredAttr}>`;
+      } else if (field.type === 'number' || field.type === 'decimal') {
+        const validation = field.validation || {};
+        const minAttr = validation.min !== undefined ? ` min="${validation.min}"` : '';
+        const maxAttr = validation.max !== undefined ? ` max="${validation.max}"` : '';
+        const step = field.type === 'number' ? '1' : 'any';
+        inputHtml = `<input type="number" step="${step}" data-field-id="${field.id}" ${requiredAttr}${minAttr}${maxAttr}>`;
+      } else if (field.type === 'note') {
+        fieldEl.innerHTML = `<p style="color:#555; font-style:italic;">${field.label}</p>`;
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else if (['image', 'audio', 'video', 'file'].includes(field.type)) {
+        fieldEl.innerHTML = renderMediaFieldHtml(field, requiredAttr, hintHtml);
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else if (field.type === 'signature') {
+        fieldEl.innerHTML = renderSignatureFieldHtml(field, requiredAttr, hintHtml);
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else {
+        const patternAttr = (field.validation && field.validation.pattern)
+          ? ` pattern="${field.validation.pattern.replace(/"/g, '&quot;')}"` : '';
+        inputHtml = `<input type="text" data-field-id="${field.id}" ${requiredAttr}${patternAttr}>`;
+      }
+
+      fieldEl.innerHTML = `<label>${field.label}${field.required ? ' *' : ''}</label>${hintHtml}${inputHtml}`;
+      sectionEl.appendChild(fieldEl);
+    });
+
+    container.appendChild(sectionEl);
+  });
+
+  // Les pavés de signature ont besoin d'être déjà dans la page (mise en page
+  // calculée) pour lire leur taille réelle avant de configurer le dessin.
+  document.querySelectorAll('.signature-canvas').forEach(c => initSignatureCanvas(c.dataset.canvasId));
+
+  if (prefillResponses) {
+    prefillFormValues(prefillResponses);
+  }
+
+  container.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('input', () => { recomputeCalculatedFields(); recomputeConditions(); });
+    el.addEventListener('change', () => { recomputeCalculatedFields(); recomputeConditions(); });
+  });
+  recomputeCalculatedFields();
+  recomputeConditions();
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'submit';
+  submitBtn.id = 'submit-btn';
+  submitBtn.textContent = editSubmissionId
+    ? 'Enregistrer les corrections'
+    : (caseIdParam ? 'Enregistrer la visite' : (isSurveyMode ? 'Enregistrer l\'enquête' : 'Enregistrer la consultation'));
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.id = 'cancel-btn';
+  cancelBtn.className = 'btn btn-ghost';
+  cancelBtn.style.marginRight = '10px';
+  cancelBtn.textContent = 'Annuler';
+  cancelBtn.onclick = () => {
+    const hasInput = Array.from(container.querySelectorAll('[data-field-id]')).some(el => {
+      if (el.type === 'checkbox') return el.checked;
+      return el.value && String(el.value).trim() !== '';
+    });
+    if (hasInput && !confirm('Annuler ? Ce qui a été saisi ne sera pas enregistré.')) return;
+    if (window.history.length > 1) window.history.back();
+    else window.location.href = '/';
+  };
+  container.appendChild(cancelBtn);
+  container.appendChild(submitBtn);
+}
+
+async function loadForm(fid) {
+  if (window.loadOfflineScripts) await loadOfflineScripts();
+  let form;
+  try {
+    const formDetailRes = await fetch(`/api/forms/${fid}`, { credentials: 'same-origin' });
+    if (!formDetailRes.ok) {
+      document.getElementById('global-error').textContent = "Formulaire introuvable.";
+      document.getElementById('global-error').classList.remove('hidden');
+      return;
+    }
+    form = await formDetailRes.json();
+  } catch (e) {
+    // Hors-ligne : on retombe sur la définition mise en cache la dernière
+    // fois que ce projet a été visité en ligne (voir offline_db.js).
+    if (!window.getCachedForms) {
+      document.getElementById('global-error').textContent = "Hors ligne — ce formulaire n'a encore jamais été consulté en ligne sur cet appareil.";
+      document.getElementById('global-error').classList.remove('hidden');
+      return;
+    }
+    // On ne connaît pas encore le project_id ici : on cherche ce formulaire
+    // dans TOUS les projets déjà mis en cache sur cet appareil.
+    const allForms = await offlineDb.forms.toArray();
+    form = allForms.find(f => f.id === fid);
+    if (!form) {
+      document.getElementById('global-error').textContent = "Hors ligne — ce formulaire n'a encore jamais été consulté en ligne sur cet appareil.";
+      document.getElementById('global-error').classList.remove('hidden');
+      return;
+    }
+    isOfflineForm = true;
+  }
+  renderForm(form);
+}
+
+async function listForms(pid, patId) {
+  const formsRes = await fetch(`/api/forms?project_id=${pid}`, { credentials: 'same-origin' });
+  const forms = await formsRes.json();
+
+  if (forms.length === 0) {
+    document.getElementById('global-error').textContent =
+      "Aucun formulaire n\'existe encore pour ce projet. Crée-en un depuis la page du projet.";
+    document.getElementById('global-error').classList.remove('hidden');
+    return;
+  }
+
+  if (forms.length === 1) {
+    await loadForm(forms[0].id);
+  } else {
+    document.getElementById('page-title').textContent = 'Choisir un formulaire';
+    const chooser = document.getElementById('form-chooser');
+    const list = document.getElementById('form-choice-list');
+    list.innerHTML = '';
+    forms.forEach(f => {
+      const li = document.createElement('li');
+      const qs = new URLSearchParams();
+      if (patId) qs.set('patient_id', patId);
+      qs.set('form_id', f.id);
+      li.innerHTML = `<a href="/submission.html?${qs.toString()}">${f.name}</a>`;
+      list.appendChild(li);
+    });
+    chooser.classList.remove('hidden');
+  }
+}
+
+document.getElementById('clinical-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('global-error');
+  const successEl = document.getElementById('success-message');
+  const serverAlertsEl = document.getElementById('server-alerts');
+  const submitBtn = document.getElementById('submit-btn');
+  errorEl.classList.add('hidden');
+  successEl.classList.add('hidden');
+  serverAlertsEl.innerHTML = '';
+
+  // Anti double-clic (point 7) : un seul envoi à la fois, quel que soit le mode.
+  if (submitBtn.disabled) return;
+  submitBtn.disabled = true;
+  const originalBtnText = submitBtn.textContent;
+  submitBtn.textContent = 'Envoi en cours…';
+  const reEnableBtn = () => { submitBtn.disabled = false; submitBtn.textContent = originalBtnText; };
+
+  const chosenDate = document.getElementById('event-date').value;
+  const collectedAtIso = chosenDate ? new Date(chosenDate + 'T00:00:00').toISOString() : new Date().toISOString();
+
+  // --- Mode édition : corriger une soumission existante, ne jamais en créer une nouvelle ---
+  if (editSubmissionId) {
+    const editPayload = { responses: fieldValues(), collected_at: collectedAtIso };
+    if (expectedUpdatedAt) editPayload.expected_updated_at = expectedUpdatedAt;
+    const editRes = await fetch(`/api/submissions/${editSubmissionId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(editPayload)
+    });
+    if (editRes.status === 401) { window.location.href = '/login.html'; return; }
+    if (editRes.ok) {
+      const editData = await editRes.json().catch(() => ({}));
+      successEl.textContent = 'Correction enregistrée avec succès.';
+      successEl.classList.remove('hidden');
+      successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const actionsEl = document.getElementById('post-submit-actions');
+      const backHref = document.getElementById('breadcrumb-project').href || '/';
+      actionsEl.innerHTML = `<a class="btn btn-ghost btn-sm" href="${backHref}">← Retour au projet</a>`;
+      actionsEl.classList.remove('hidden');
+      submitBtn.textContent = 'Enregistré ✓';
+      showReferralPrompt(editData.referral, collectedAtIso);
+    } else if (editRes.status === 409) {
+      errorEl.textContent = "Quelqu'un d'autre a modifié cette soumission entre-temps — recharge la page pour voir la version actuelle avant de corriger à nouveau.";
+      errorEl.classList.remove('hidden');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reEnableBtn();
+    } else {
+      const data = await editRes.json().catch(() => ({}));
+      errorEl.textContent = extractApiError(data, "Erreur lors de l\'enregistrement de la correction.");
+      errorEl.classList.remove('hidden');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reEnableBtn();
+    }
+    return;
+  }
+
+  let effectivePatientId = patientId || casePatientId;
+
+  // Mode Enquête : si un patient existant a été sélectionné via la recherche,
+  // on met à jour sa fiche avec ce qui est affiché (corrections éventuelles)
+  // et on le réutilise. Sinon, on crée un nouveau patient à partir du bloc
+  // "Patient" AVANT de soumettre, car /api/submissions exige toujours un
+  // patient_id.
+  if (isSurveyMode && selectedPatientId) {
+    const firstName = document.getElementById('patient-first-name').value.trim();
+    const lastName = document.getElementById('patient-last-name').value.trim();
+    if (!firstName || !lastName) {
+      errorEl.textContent = "Merci d\'indiquer au moins le prénom et le nom du patient.";
+      errorEl.classList.remove('hidden');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reEnableBtn();
+      return;
+    }
+
+    const patientUpdatePayload = {
+      first_name: firstName,
+      last_name: lastName,
+      date_of_birth: document.getElementById('patient-dob').value || null,
+      sex: document.getElementById('patient-sex').value || null,
+      phone: document.getElementById('patient-phone').value || null,
+    };
+
+    try {
+      const updateRes = await fetch(`/api/patients/${selectedPatientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(patientUpdatePayload)
+      });
+
+      if (updateRes.status === 401) { window.location.href = '/login.html'; return; }
+
+      if (!updateRes.ok) {
+        const errData = await updateRes.json().catch(() => ({}));
+        errorEl.textContent = extractApiError(errData, "Impossible de mettre à jour le patient.");
+        errorEl.classList.remove('hidden');
+        errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        reEnableBtn();
+        return;
+      }
+    } catch (netErr) {
+      // Hors ligne : impossible de mettre à jour la fiche patient pour l'instant
+      // (ça demande le serveur) — on continue quand même avec les informations
+      // déjà connues de ce patient, sans bloquer l'enregistrement de la visite.
+      console.warn('Hors ligne : mise à jour du patient ignorée, informations existantes conservées.', netErr);
+    }
+
+    effectivePatientId = selectedPatientId;
+  } else if (isSurveyMode) {
+    const firstName = document.getElementById('patient-first-name').value.trim();
+    const lastName = document.getElementById('patient-last-name').value.trim();
+    if (!firstName || !lastName) {
+      errorEl.textContent = "Merci d\'indiquer au moins le prénom et le nom du patient.";
+      errorEl.classList.remove('hidden');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reEnableBtn();
+      return;
+    }
+
+    const patientPayload = {
+      project_id: currentForm.project_id,
+      first_name: firstName,
+      last_name: lastName,
+      date_of_birth: document.getElementById('patient-dob').value || null,
+      sex: document.getElementById('patient-sex').value || null,
+      phone: document.getElementById('patient-phone').value || null,
+    };
+
+    let patientRes;
+    try {
+      patientRes = await fetch('/api/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(patientPayload)
+      });
+    } catch (netErr) {
+      // Hors ligne : c'est le scénario le plus important sur le terrain
+      // (dépistage en communauté, patient jamais vu avant) — on crée le
+      // patient entièrement en local, avec son identifiant définitif tout de
+      // suite (voir offline_db.js), plutôt que de bloquer la saisie.
+      if (!window.createPatientOffline) {
+        errorEl.textContent = "Impossible d'enregistrer ce patient : ni connexion, ni stockage local disponible sur cet appareil.";
+        errorEl.classList.remove('hidden');
+        errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        reEnableBtn();
+        return;
+      }
+      const offlinePatient = await createPatientOffline({
+        projectId: currentForm.project_id, firstName, lastName,
+        dateOfBirth: patientPayload.date_of_birth, sex: patientPayload.sex, phone: patientPayload.phone,
+      });
+      effectivePatientId = offlinePatient.id;
+      if (window.updateOnlineIndicator) updateOnlineIndicator();
+      patientRes = null; // pas de reponse serveur a traiter plus bas
+    }
+
+    if (patientRes) {
+      if (patientRes.status === 401) { window.location.href = '/login.html'; return; }
+
+      if (patientRes.status === 409) {
+        const errData = await patientRes.json().catch(() => ({}));
+        const detail = errData.detail;
+        if (detail && typeof detail === 'object' && detail.existing_patient_id) {
+          if (confirm(`${detail.msg}\n\nCréer quand même une nouvelle fiche pour ce patient ?`)) {
+            patientRes = await fetch('/api/patients?force=true', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify(patientPayload)
+            });
+          } else {
+            errorEl.textContent = "Création annulée — retrouve plutôt ce patient via la recherche ci-dessus.";
+            errorEl.classList.remove('hidden');
+            errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            reEnableBtn();
+            return;
+          }
+        } else {
+          // 409 pour une autre raison (ex : numéro de téléphone déjà utilisé)
+          // — on affiche directement avec le corps déjà lu ci-dessus, sans
+          // retomber sur la lecture générique plus bas (une réponse réseau
+          // ne se lit qu'une seule fois).
+          errorEl.textContent = extractApiError(errData, "Impossible d\'enregistrer le patient.");
+          errorEl.classList.remove('hidden');
+          errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          reEnableBtn();
+          return;
+        }
+      }
+
+      if (!patientRes.ok) {
+        const errData = await patientRes.json().catch(() => ({}));
+        errorEl.textContent = extractApiError(errData, "Impossible d\'enregistrer le patient.");
+        errorEl.classList.remove('hidden');
+        errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        reEnableBtn();
+        return;
+      }
+
+      const newPatient = await patientRes.json();
+      effectivePatientId = newPatient.id;
+    }
+  }
+
+  const responses = fieldValues();
+
+  const payload = {
+    form_id: currentForm.id,
+    responses: responses,
+    collected_at: collectedAtIso,
+    idempotency_key: currentIdempotencyKey
+  };
+  if (effectivePatientId) payload.patient_id = effectivePatientId;
+  if (caseIdParam) payload.case_id = caseIdParam;
+
+  let res = null;
+  let savedOffline = false;
+  try {
+    res = await fetch('/api/submissions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+  } catch (netErr) {
+    // Hors ligne (ou serveur injoignable) : on enregistre en local plutôt que
+    // de perdre ce qui vient d'être rempli. L'envoi réel se fera au retour du
+    // réseau (étape suivante). Le jeton d'idempotence déjà présent protège
+    // contre un double envoi si la synchronisation retente plus tard.
+    if (!window.queueOfflineSubmission) {
+      errorEl.textContent = "Impossible d'enregistrer : ni connexion, ni stockage local disponible sur cet appareil.";
+      errorEl.classList.remove('hidden');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reEnableBtn();
+      return;
+    }
+    await queueOfflineSubmission({
+      formId: currentForm.id,
+      patientId: effectivePatientId,
+      caseId: caseIdParam,
+      responses,
+      collectedAt: collectedAtIso,
+      idempotencyKey: currentIdempotencyKey,
+    });
+    savedOffline = true;
+    if (window.updateOnlineIndicator) updateOnlineIndicator();
+  }
+
+  if (res && res.status === 401) { window.location.href = '/login.html'; return; }
+
+  if (savedOffline || (res && res.ok)) {
+    const data = savedOffline ? { alerts: [] } : await res.json();
+    successEl.textContent = savedOffline
+      ? "Enregistré en local — sera envoyé automatiquement une fois la connexion revenue."
+      : (currentForm.form_type === 'registration' ? 'Inscription complétée avec succès.' : (caseIdParam ? 'Visite enregistrée avec succès.' : (isSurveyMode ? 'Enquête enregistrée avec succès.' : 'Consultation enregistrée avec succès.')));
+    successEl.className = savedOffline ? 'alert-banner severity-medium' : 'alert-banner severity-low';
+    successEl.style.fontWeight = '600';
+    successEl.classList.remove('hidden');
+    successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    submitBtn.textContent = savedOffline ? 'Enregistré localement ✓' : 'Enregistré ✓';
+
+    const actionsEl = document.getElementById('post-submit-actions');
+    const backHref = document.getElementById('breadcrumb-project').href || '/';
+    const backLabel = caseIdParam ? '← Retour au dossier' : '← Retour au projet';
+    actionsEl.innerHTML = `
+      <button type="button" class="btn btn-secondary btn-sm" id="new-consultation-btn">+ Nouvelle ${isSurveyMode ? 'enquête' : 'consultation'}</button>
+      ${effectivePatientId && !caseIdParam && !savedOffline ? `<a class="btn btn-ghost btn-sm" href="/history.html?patient_id=${effectivePatientId}">Voir l\'historique</a>` : ''}
+      <a class="btn btn-ghost btn-sm" id="back-to-project-btn" href="${backHref}">${backLabel}</a>
+    `;
+    actionsEl.classList.remove('hidden');
+    document.getElementById('new-consultation-btn').addEventListener('click', () => {
+      actionsEl.classList.add('hidden');
+      successEl.classList.add('hidden');
+      serverAlertsEl.innerHTML = '';
+      document.getElementById('clinical-form').reset();
+      document.getElementById('event-date').value = new Date().toISOString().slice(0, 10);
+      // form.reset() ne touche pas aux pixels déjà dessinés sur un <canvas>
+      // (ce n'est pas un contrôle de formulaire standard) — sans ça, le
+      // tracé de la consultation précédente resterait affiché.
+      document.querySelectorAll('.signature-canvas').forEach(c => clearSignatureCanvas(c.dataset.canvasId));
+      if (isSurveyMode) clearPatientSelection();
+      recomputeCalculatedFields();
+      recomputeConditions();
+      reEnableBtn();
+      currentIdempotencyKey = generateIdempotencyKey();
+    });
+
+    if (data.alerts && data.alerts.length > 0) {
+      serverAlertsEl.innerHTML = data.alerts.map(a =>
+        `<div class="alert-banner severity-${a.severity}">⚠️ ${a.message}</div>`
+      ).join('');
+    }
+    if (!savedOffline) showReferralPrompt(data.referral, collectedAtIso);
+  } else {
+    const data = await res.json().catch(() => ({}));
+    errorEl.textContent = extractApiError(data, "Erreur lors de l\'enregistrement.");
+    errorEl.classList.remove('hidden');
+    errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    reEnableBtn();
+  }
+});
+
+// ============================================================
+// LOGIQUE PRINCIPALE — Charge projet d'abord, initAppShell après
+// ============================================================
+(async () => {
+  // --- 0. Mode édition : corriger une soumission déjà enregistrée ---
+  if (editSubmissionId) {
+    let subRes;
+    try {
+      subRes = await fetch(`/api/submissions/${editSubmissionId}`, { credentials: 'same-origin' });
+    } catch (netErr) {
+      // Pas de cache local des soumissions (contrairement aux formulaires/
+      // patients/cas) : la correction d'une soumission n'est donc pas
+      // possible hors-ligne pour l'instant. On le dit clairement plutôt que
+      // de laisser la page bloquée sans explication (voir méthode §5 du
+      // rapport v9 : ne jamais laisser un fetch initial casser le repli).
+      document.getElementById('global-error').textContent =
+        "Hors ligne — impossible de corriger cette soumission sans connexion. Réessaie une fois reconnecté.";
+      document.getElementById('global-error').classList.remove('hidden');
+      try { await initAppShell(null); } catch (e) { console.warn('initAppShell non disponible', e); }
+      return;
+    }
+    if (subRes.status === 401) { window.location.href = '/login.html'; return; }
+    if (!subRes.ok) {
+      document.getElementById('global-error').textContent = "Soumission introuvable.";
+      document.getElementById('global-error').classList.remove('hidden');
+      return;
+    }
+    const sub = await subRes.json();
+
+    document.getElementById('breadcrumb-action').textContent = 'Correction';
+    document.getElementById('patient-name').textContent = sub.patient_name
+      ? `Patient : ${sub.patient_name} — correction d'une soumission du ${new Date(sub.collected_at).toLocaleDateString('fr-FR')}`
+      : '';
+
+    let patientForBreadcrumb = null;
+    if (sub.patient_id) {
+      try {
+        const pRes = await fetch(`/api/patients/${sub.patient_id}`, { credentials: 'same-origin' });
+        if (pRes.ok) patientForBreadcrumb = await pRes.json();
+      } catch (netErr) {
+        // Pas bloquant : le fil d'Ariane perd juste son lien vers le projet,
+        // et project_id restera absent plus bas (voir §1 du rapport v9) —
+        // mieux vaut ça qu'une page qui casse entièrement.
+      }
+    }
+    const breadcrumbProjectEl = document.getElementById('breadcrumb-project');
+    if (patientForBreadcrumb && breadcrumbProjectEl) {
+      breadcrumbProjectEl.href = `/project_hub.html?project_id=${patientForBreadcrumb.project_id}`;
+    }
+
+    prefillResponses = sub.responses;
+    expectedUpdatedAt = sub.updated_at;
+    renderForm({
+      id: sub.form_id,
+      name: sub.form_name,
+      definition: sub.form_definition,
+      // Le endpoint GET /api/submissions/{id} ne renvoie pas project_id, et l'URL
+      // de correction (voir case_detail.html / survey.html) ne le porte pas non
+      // plus : on le récupère via le patient déjà chargé juste au-dessus, seule
+      // source fiable disponible ici (voir §1 du rapport v9).
+      project_id: patientForBreadcrumb ? patientForBreadcrumb.project_id : null,
+    });
+    document.getElementById('event-date').value = sub.collected_at.slice(0, 10);
+
+    try { await initAppShell(null); } catch (e) { console.warn('initAppShell non disponible', e); }
+    return;
+  }
+
+  // --- 1. Chargement initial du projet (non bloquant) ---
+  let project = null;
+  let patient = null;
+  if (window.loadOfflineScripts) await loadOfflineScripts();
+
+  if (caseIdParam) {
+    try {
+      const caseRes = await fetch(`/api/cases/${caseIdParam}`, { credentials: 'same-origin' });
+      if (caseRes.status === 401) { window.location.href = '/login.html'; return; }
+      if (caseRes.ok) {
+        caseInfo = await caseRes.json();
+        casePatientId = caseInfo.patient_id;
+      }
+    } catch (netErr) {
+      // Hors ligne : ce cas a-t-il déjà été consulté en ligne sur cet appareil ?
+      if (window.getCachedCaseById) {
+        caseInfo = await getCachedCaseById(caseIdParam);
+        if (caseInfo) casePatientId = caseInfo.patient_id;
+      }
+    }
+  }
+
+  const effectivePatientIdForLoad = patientId || casePatientId;
+
+  if (effectivePatientIdForLoad) {
+    // Mode Consultation / Suivi : on charge le patient pour avoir le project_id
+    try {
+      const patientRes = await fetch(`/api/patients/${effectivePatientIdForLoad}`, { credentials: 'same-origin' });
+      if (patientRes.status === 401) { window.location.href = '/login.html'; return; }
+      if (patientRes.ok) {
+        patient = await patientRes.json();
+      }
+    } catch (netErr) {
+      if (window.getCachedPatientById) patient = await getCachedPatientById(effectivePatientIdForLoad);
+    }
+  }
+
+  // Détermine le project_id (soit depuis l'URL, soit depuis le patient)
+  const effectiveProjectId = projectId || (patient ? patient.project_id : null);
+
+  if (effectiveProjectId) {
+    try {
+      const projRes = await fetch(`/api/projects/${effectiveProjectId}`, { credentials: 'same-origin' });
+      if (projRes.ok) project = await projRes.json();
+    } catch (netErr) {
+      const cachedInfo = window.getCachedProjectInfo ? await getCachedProjectInfo(effectiveProjectId) : null;
+      if (cachedInfo) project = { id: effectiveProjectId, name: cachedInfo.name, description: cachedInfo.description };
+    }
+  }
+
+  // --- 2. Mise à jour UI immédiate (avant initAppShell) ---
+  const breadcrumbProject = document.getElementById('breadcrumb-project');
+  const breadcrumbAction = document.getElementById('breadcrumb-action');
+  const pageTitle = document.getElementById('page-title');
+  const patientName = document.getElementById('patient-name');
+
+  if (isSurveyMode) {
+    // Mode Enquête
+    pageTitle.textContent = project ? `Nouvelle enquête — ${project.name}` : 'Nouvelle enquête';
+    breadcrumbAction.textContent = 'Enquête';
+    patientName.style.display = 'none';
+    if (project && breadcrumbProject) {
+      breadcrumbProject.href = `/survey.html?project_id=${project.id}`;
+      breadcrumbProject.textContent = project.name;
+    }
+  } else {
+    // Mode Consultation / Suivi
+    if (patient) {
+      patientName.textContent = caseInfo
+        ? `Patient : ${patient.first_name} ${patient.last_name} — visite pour le dossier ${caseInfo.case_number}`
+        : `Patient : ${patient.first_name} ${patient.last_name}`;
+      if (breadcrumbProject) {
+        breadcrumbProject.href = caseInfo
+          ? `/case_detail.html?case_id=${caseInfo.id}`
+          : `/project_hub.html?project_id=${patient.project_id}`;
+        breadcrumbProject.textContent = caseInfo ? caseInfo.case_number : (project ? project.name : 'Projet');
+      }
+      if (caseInfo) breadcrumbAction.textContent = 'Suivi';
+    } else {
+      patientName.textContent = 'Patient introuvable.';
+    }
+  }
+
+  // --- 3. Chargement du formulaire (commun aux deux modes) ---
+  if (formId) {
+    await loadForm(formId);
+  } else if (effectiveProjectId) {
+    await listForms(effectiveProjectId, patientId);
+  } else {
+    document.getElementById('global-error').textContent =
+      "Paramètres manquants. Utilisez ?form_id=xxx ou ?project_id=xxx (ou ?patient_id=xxx).";
+    document.getElementById('global-error').classList.remove('hidden');
+  }
+
+  // --- 4. initAppShell en dernier (ne bloque rien) ---
+  try {
+    await initAppShell(null);
+  } catch (e) {
+    console.warn('initAppShell non disponible', e);
+  }
+})();
+</script>
+
+<script>
+// --- Mini-évaluateur de formules sécurisé (même grammaire que backend/formula_engine.py) ---
+function tokenize(expr) {
+  const tokens = [];
+  let i = 0;
+  while (i < expr.length) {
+    const c = expr[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (/[0-9.]/.test(c)) {
+      let num = '';
+      while (i < expr.length && /[0-9.]/.test(expr[i])) { num += expr[i]; i++; }
+      tokens.push({ type: 'number', value: parseFloat(num) });
+      continue;
+    }
+    if (/[a-zA-Z_]/.test(c)) {
+      let ident = '';
+      while (i < expr.length && /[a-zA-Z0-9_]/.test(expr[i])) { ident += expr[i]; i++; }
+      tokens.push({ type: 'ident', value: ident });
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      const quote = c;
+      i++;
+      let str = '';
+      while (i < expr.length && expr[i] !== quote) { str += expr[i]; i++; }
+      i++;
+      tokens.push({ type: 'string', value: str });
+      continue;
+    }
+    if (c === '=' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '==' }); i += 2; continue; }
+    if (c === '!' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '!=' }); i += 2; continue; }
+    if (c === '<' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '<=' }); i += 2; continue; }
+    if (c === '>' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '>=' }); i += 2; continue; }
+    if ('+-*/(),<>'.includes(c)) { tokens.push({ type: 'op', value: c }); i++; continue; }
+    throw new Error(`Caractère non autorisé dans la formule : "${c}"`);
+  }
+  return tokens;
+}
+
+const NUMERIC_FUNCTIONS = {
+  pow: (a, b) => Math.pow(a, b),
+  sqrt: (a) => Math.sqrt(a),
+  abs: (a) => Math.abs(a),
+  round: (a, n = 0) => pythonRound(a, n)
+};
+
+// Reproduit EXACTEMENT le round() de Python (arrondi "au pair" — 2.5 -> 2,
+// pas 3 — mais seulement pour les vraies égalités binaires ; 2.675 n'est pas
+// une vraie égalité, sa valeur réelle en mémoire est 2.67499999999999982...,
+// donc round(2.675, 2) donne 2.67 des deux côtés, pas 2.68). Sans ce calcul
+// précis, une consultation hors-ligne pourrait afficher un résultat différent
+// une fois resynchronisée avec le serveur.
+function pythonRound(value, ndigits) {
+  ndigits = ndigits || 0;
+  if (!isFinite(value)) return value;
+  const neg = value < 0;
+  const absVal = Math.abs(value);
+  const precise = absVal.toFixed(Math.min(20, Math.max(0, ndigits + 15)));
+  const dotIdx = precise.indexOf('.');
+  const intPart = precise.slice(0, dotIdx);
+  const fracPart = precise.slice(dotIdx + 1);
+  if (ndigits >= fracPart.length) return value;
+  const keep = fracPart.slice(0, ndigits);
+  const nextDigit = fracPart[ndigits];
+  const rest = fracPart.slice(ndigits + 1);
+  let roundUp;
+  if (nextDigit < '5') roundUp = false;
+  else if (nextDigit > '5') roundUp = true;
+  else {
+    const hasMoreAfter = /[1-9]/.test(rest);
+    if (hasMoreAfter) roundUp = true;
+    else {
+      const lastKept = ndigits > 0 ? (keep[ndigits - 1] || '0') : intPart[intPart.length - 1];
+      roundUp = (parseInt(lastKept, 10) % 2) === 1;
+    }
+  }
+  const combined = intPart + keep;
+  const asInt = BigInt(combined) + (roundUp ? 1n : 0n);
+  const combinedStr = asInt.toString().padStart(intPart.length + ndigits, '0');
+  const newIntPart = combinedStr.slice(0, combinedStr.length - ndigits) || '0';
+  const newFracPart = ndigits > 0 ? combinedStr.slice(combinedStr.length - ndigits) : '';
+  const result = parseFloat(newIntPart + (ndigits > 0 ? '.' + newFracPart : ''));
+  return neg ? -result : result;
+}
+
+const GENERIC_FUNCTIONS = {
+  if: (condition, trueVal, falseVal) => truthy(condition) ? trueVal : falseVal,
+  selected: (value, target) => {
+    if (Array.isArray(value)) return value.map(String).includes(String(target));
+    if (value === null || value === undefined) return false;
+    return String(value) === String(target);
+  },
+  coalesce: (...args) => {
+    for (const a of args) {
+      if (a !== null && a !== undefined && a !== '' && !(Array.isArray(a) && a.length === 0)) return a;
+    }
+    return args.length ? args[args.length - 1] : null;
+  },
+};
+
+function toNumber(v) {
+  if (v === null || v === undefined) return NaN;
+  if (typeof v === 'boolean') throw new Error("Impossible d\'utiliser une valeur oui/non dans un calcul");
+  const n = parseFloat(v);
+  if (isNaN(n) && v !== '') throw new Error(`Valeur non numérique : "${v}"`);
+  return n;
+}
+
+function tryToNumber(v) {
+  if (v === null || v === undefined || typeof v === 'boolean') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function compareValues(op, left, right) {
+  if (left === null || left === undefined || right === null || right === undefined) {
+    if (op === '==') return left === right;
+    if (op === '!=') return left !== right;
+    return false;
+  }
+  const lNum = tryToNumber(left);
+  const rNum = tryToNumber(right);
+  let l, r;
+  if (lNum !== null && rNum !== null) { l = lNum; r = rNum; }
+  else { l = String(left); r = String(right); }
+  switch (op) {
+    case '==': return l === r;
+    case '!=': return l !== r;
+    case '<': return l < r;
+    case '>': return l > r;
+    case '<=': return l <= r;
+    case '>=': return l >= r;
+  }
+  throw new Error(`Opérateur inconnu : ${op}`);
+}
+
+function evaluateFormula(formula, values) {
+  const tokens = tokenize(formula);
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const advance = () => tokens[pos++];
+
+  function resolveIdent(name) {
+    if (name === 'true') return true;
+    if (name === 'false') return false;
+    if (!(name in values)) throw new Error(`Champ inconnu : ${name}`);
+    const v = values[name];
+    return v === '' ? null : v;
+  }
+
+  function parsePrimary() {
+    const t = peek();
+    if (!t) throw new Error('Formule incomplète');
+    if (t.type === 'number') { advance(); return t.value; }
+    if (t.type === 'string') { advance(); return t.value; }
+    if (t.type === 'ident') {
+      if (t.value === 'and' || t.value === 'or' || t.value === 'not') {
+        throw new Error(`'${t.value}' n\'est pas attendu ici`);
+      }
+      advance();
+      if (peek() && peek().value === '(') {
+        advance();
+        const args = [];
+        if (peek() && peek().value !== ')') {
+          args.push(parseOr());
+          while (peek() && peek().value === ',') { advance(); args.push(parseOr()); }
+        }
+        if (!peek() || peek().value !== ')') throw new Error('Parenthèse manquante');
+        advance();
+        if (t.value in NUMERIC_FUNCTIONS) {
+          return NUMERIC_FUNCTIONS[t.value](...args.map(toNumber));
+        }
+        if (t.value in GENERIC_FUNCTIONS) {
+          return GENERIC_FUNCTIONS[t.value](...args);
+        }
+        throw new Error(`Fonction non autorisée : ${t.value}`);
+      }
+      return resolveIdent(t.value);
+    }
+    if (t.value === '(') {
+      advance();
+      const v = parseOr();
+      if (!peek() || peek().value !== ')') throw new Error('Parenthèse manquante');
+      advance();
+      return v;
+    }
+    if (t.value === '-') { advance(); return -toNumber(parsePrimary()); }
+    throw new Error('Formule invalide');
+  }
+
+  function parseMulDiv() {
+    let v = parsePrimary();
+    while (peek() && (peek().value === '*' || peek().value === '/')) {
+      const op = advance().value;
+      const rhs = parsePrimary();
+      v = op === '*' ? toNumber(v) * toNumber(rhs) : toNumber(v) / toNumber(rhs);
+    }
+    return v;
+  }
+
+  function parseAddSub() {
+    let v = parseMulDiv();
+    while (peek() && (peek().value === '+' || peek().value === '-')) {
+      const op = advance().value;
+      const rhs = parseMulDiv();
+      v = op === '+' ? toNumber(v) + toNumber(rhs) : toNumber(v) - toNumber(rhs);
+    }
+    return v;
+  }
+
+  function parseComparison() {
+    const v = parseAddSub();
+    if (peek() && ['==', '!=', '<', '>', '<=', '>='].includes(peek().value)) {
+      const op = advance().value;
+      const rhs = parseAddSub();
+      return compareValues(op, v, rhs);
+    }
+    return v;
+  }
+
+  function parseNot() {
+    if (peek() && peek().type === 'ident' && peek().value === 'not') {
+      advance();
+      return !truthy(parseNot());
+    }
+    return parseComparison();
+  }
+
+  function parseAnd() {
+    let v = parseNot();
+    while (peek() && peek().type === 'ident' && peek().value === 'and') {
+      advance();
+      const rhs = parseNot();
+      v = truthy(v) && truthy(rhs);
+    }
+    return v;
+  }
+
+  function parseOr() {
+    let v = parseAnd();
+    while (peek() && peek().type === 'ident' && peek().value === 'or') {
+      advance();
+      const rhs = parseAnd();
+      v = truthy(v) || truthy(rhs);
+    }
+    return v;
+  }
+
+  const result = parseOr();
+  if (pos < tokens.length) throw new Error('Formule invalide (caractères en trop)');
+  return result;
+}
+</script>
+
+</body>
+</html>

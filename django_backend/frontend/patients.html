@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clinique — Patients</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .page-header { margin-bottom: 20px; }
+  .page-header h1 { font-size: 1.6rem; margin: 0; }
+
+  .filters-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+  .filters-row select { min-width: 220px; }
+
+  .patient-row { cursor: pointer; }
+  .patient-row:hover { background: var(--surface-muted); }
+  .sortable-th { cursor: pointer; user-select: none; }
+  .sortable-th:hover { color: var(--ink); }
+  #patients-count-label { color: var(--ink-muted); font-size: 0.85rem; margin-bottom: 10px; }
+
+  .status-badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; }
+  .status-badge.admitted { background: var(--success-soft); color: var(--success-dark); }
+  .status-badge.pending { background: var(--sev-medium-bg); color: var(--sev-medium-fg); }
+  .status-badge.not_admitted { background: var(--surface-muted); color: var(--ink-muted); }
+
+  /* --- Fenêtre "Infos" (lecture seule) --- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface); border-radius: var(--radius-lg); padding: var(--space-5);
+    width: 100%; max-width: 420px; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-md);
+  }
+  .modal-box h3 { margin-top: 0; }
+  .patient-info-list { margin: 16px 0 0 0; }
+  .patient-info-list .info-row { margin-bottom: 14px; }
+  .patient-info-list dt { font-size: 0.75rem; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .patient-info-list dd { margin: 0; font-size: 0.92rem; color: var(--ink); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+  .th-stat { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-faint); }
+
+  /* --- Contenu imprimable : invisible à l'écran, seul visible à l'impression --- */
+  #print-content { display: none; }
+  @media print {
+    html, body { height: auto !important; margin: 0 !important; }
+    @page { margin: 12mm; }
+    .app-shell { display: none !important; }
+    #print-content { display: block !important; font-family: Arial, sans-serif; color: #000; }
+    #print-content h1 { font-size: 1.3rem; margin-bottom: 2px; }
+    #print-content p { font-size: 0.85rem; }
+    #print-content table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    #print-content th, #print-content td { padding: 4px 6px; font-size: 0.8rem; border-bottom: 1px solid #ddd; text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="page-header">
+      <h1>👥 Patients enrôlés</h1>
+    </div>
+
+    <div class="filters-row">
+      <select id="filter-project">
+        <option value="">-- Choisir un projet --</option>
+      </select>
+      <select id="filter-form" class="hidden">
+        <option value="">Tous les formulaires</option>
+      </select>
+      <select id="filter-status" class="hidden">
+        <option value="">Tous les statuts</option>
+        <option value="admitted">Admis en Suivi</option>
+        <option value="pending">En attente (dossier à créer)</option>
+        <option value="not_admitted">Non admis</option>
+      </select>
+    </div>
+
+    <p id="pick-project-hint" style="color:var(--ink-muted);">Choisis un projet ci-dessus pour voir ses patients.</p>
+    <div id="patients-count-row" class="hidden" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <p id="patients-count-label" style="margin:0;"></p>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-ghost btn-sm" id="patients-print-btn">🖨️ Imprimer</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="patients-export-btn">⬇️ Exporter (CSV)</button>
+      </div>
+    </div>
+    <div id="patients-table-wrap"></div>
+
+  </main>
+</div>
+
+<div id="print-content"></div>
+
+<div class="modal-overlay" id="patient-info-modal-overlay">
+  <div class="modal-box">
+    <h3 id="pinfo-name"></h3>
+    <dl class="patient-info-list">
+      <div class="info-row"><dt>Code anonyme</dt><dd id="pinfo-code"></dd></div>
+      <div class="info-row"><dt>Sexe</dt><dd id="pinfo-sex"></dd></div>
+      <div class="info-row"><dt>Date de naissance</dt><dd id="pinfo-dob"></dd></div>
+      <div class="info-row"><dt>Téléphone</dt><dd id="pinfo-phone"></dd></div>
+      <div class="info-row"><dt>Numéro de dossier de suivi</dt><dd id="pinfo-case"></dd></div>
+    </dl>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="pinfo-close-btn">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+function escapeHtmlPat(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function formatDatePat(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('fr-FR');
+}
+// Âge total en mois (valeur numérique, pour le tri et la moyenne — distingue
+// un bébé de 3 mois d'un bébé de 8 mois, ce qu'une valeur en années ne
+// permettrait pas puisque les deux vaudraient "0").
+function computeAgePat(dob) {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  const now = new Date();
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  return years * 12 + months;
+}
+// Mise en forme pour l'affichage : en mois tant que l'enfant a moins de 5 ans
+// (usage nutrition — "0 ans" n'est d'aucune utilité pour un nourrisson),
+// en années au-delà.
+function formatAgePat(totalMonths) {
+  if (totalMonths === null || totalMonths === undefined) return null;
+  return totalMonths < 60 ? `${totalMonths} mois` : `${Math.floor(totalMonths / 12)} ans`;
+}
+function statusLabelPat(status) {
+  if (status === 'admitted') return 'Admis en Suivi';
+  if (status === 'pending') return 'En attente (dossier à créer)';
+  if (status === 'not_admitted') return 'Non admis';
+  return '';
+}
+
+let currentProjectId = '';
+let currentFormId = '';
+let currentFormHasReferral = false;
+let lastLoadedRows = []; // [{ patient_id, patient_name, sex, date_of_birth, referral_status }]
+let currentSort = { key: null, dir: 1 }; // dir: 1 = croissant, -1 = décroissant
+
+// Tous les patients du projet (avec sexe/date de naissance), récupérés UNE
+// SEULE FOIS par changement de projet — réutilisés comme table de correspondance
+// pour enrichir la liste même quand elle vient d'un formulaire précis (qui, lui,
+// ne renvoie pas le sexe/la date de naissance). Évite de refaire un appel par
+// patient un par un, ce qui ne tiendrait pas la route sur un projet à plusieurs
+// milliers de personnes.
+let projectPatientsMap = new Map();
+
+(async () => {
+  const user = await initAppShell(null);
+  if (!user) return;
+
+  const res = await fetch('/api/projects', { credentials: 'same-origin' });
+  const projects = res.ok ? await res.json() : [];
+  document.getElementById('filter-project').innerHTML =
+    '<option value="">-- Choisir un projet --</option>' +
+    projects.map(p => `<option value="${p.id}">${escapeHtmlPat(p.name)}</option>`).join('');
+})();
+
+document.getElementById('filter-project').addEventListener('change', async (e) => {
+  currentProjectId = e.target.value;
+  currentFormId = '';
+  document.getElementById('filter-form').value = '';
+  document.getElementById('filter-status').value = '';
+  document.getElementById('filter-status').classList.add('hidden');
+
+  if (!currentProjectId) {
+    document.getElementById('filter-form').classList.add('hidden');
+    document.getElementById('pick-project-hint').classList.remove('hidden');
+    document.getElementById('patients-count-row').classList.add('hidden');
+    document.getElementById('patients-table-wrap').innerHTML = '';
+    return;
+  }
+  document.getElementById('pick-project-hint').classList.add('hidden');
+  currentSort = { key: null, dir: 1 };
+
+  const res = await fetch(`/api/patients?project_id=${currentProjectId}`, { credentials: 'same-origin' });
+  const patients = res.ok ? await res.json() : [];
+  projectPatientsMap = new Map(patients.map(p => [p.id, p]));
+
+  await loadFormsForProject(currentProjectId);
+  await loadPatientsList();
+});
+
+async function loadFormsForProject(projectId) {
+  const res = await fetch(`/api/forms?project_id=${projectId}`, { credentials: 'same-origin' });
+  const forms = res.ok ? await res.json() : [];
+  const sel = document.getElementById('filter-form');
+  sel.innerHTML = '<option value="">Tous les formulaires</option>' +
+    forms.map(f => `<option value="${f.id}">${escapeHtmlPat(f.name)}</option>`).join('');
+  sel.classList.remove('hidden');
+}
+
+document.getElementById('filter-form').addEventListener('change', async (e) => {
+  currentFormId = e.target.value;
+  document.getElementById('filter-status').value = '';
+  await loadPatientsList();
+});
+
+document.getElementById('filter-status').addEventListener('change', () => {
+  renderPatientsTable();
+});
+
+async function loadPatientsList() {
+  const wrap = document.getElementById('patients-table-wrap');
+  wrap.innerHTML = '<p style="color:var(--ink-muted);">Chargement…</p>';
+
+  if (!currentFormId) {
+    // Aucun formulaire choisi : tous les patients du projet, sans statut Suivi
+    // (ce statut n'a de sens que par rapport à un formulaire précis).
+    currentFormHasReferral = false;
+    document.getElementById('filter-status').classList.add('hidden');
+    lastLoadedRows = Array.from(projectPatientsMap.values()).map(p => ({
+      patient_id: p.id,
+      patient_name: `${p.first_name} ${p.last_name}`,
+      anonymous_code: p.anonymous_code || null,
+      sex: p.sex || null,
+      date_of_birth: p.date_of_birth || null,
+      referral_status: null,
+    }));
+  } else {
+    const res = await fetch(`/api/forms/${currentFormId}/submissions`, { credentials: 'same-origin' });
+    const data = res.ok ? await res.json() : { submissions: [], has_referral_field: false };
+    currentFormHasReferral = !!data.has_referral_field;
+    document.getElementById('filter-status').classList.toggle('hidden', !currentFormHasReferral);
+
+    // Un même patient peut avoir rempli ce formulaire plusieurs fois — on ne
+    // garde qu'une ligne par patient, celle de sa soumission la plus récente.
+    const byPatient = new Map();
+    for (const s of (data.submissions || [])) {
+      const existing = byPatient.get(s.patient_id);
+      if (!existing || new Date(s.collected_at) > new Date(existing.collected_at)) {
+        byPatient.set(s.patient_id, s);
+      }
+    }
+    lastLoadedRows = Array.from(byPatient.values()).map(s => {
+      const pInfo = projectPatientsMap.get(s.patient_id);
+      return {
+        patient_id: s.patient_id,
+        patient_name: s.patient_name || 'Patient supprimé',
+        anonymous_code: pInfo ? pInfo.anonymous_code : null,
+        sex: pInfo ? pInfo.sex : null,
+        date_of_birth: pInfo ? pInfo.date_of_birth : null,
+        referral_status: s.referral_status,
+      };
+    });
+  }
+  renderPatientsTable();
+}
+
+function sortRows(rows) {
+  if (!currentSort.key) return rows;
+  const { key, dir } = currentSort;
+  return rows.slice().sort((a, b) => {
+    let av, bv;
+    if (key === 'sex') {
+      av = a.sex || 'zzz'; bv = b.sex || 'zzz'; // sexe non renseigné toujours en dernier
+    } else { // 'age'
+      av = computeAgePat(a.date_of_birth); bv = computeAgePat(b.date_of_birth);
+      av = av === null ? -1 : av; bv = bv === null ? -1 : bv; // âge inconnu toujours en premier
+    }
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    return 0;
+  });
+}
+
+function toggleSort(key) {
+  currentSort = currentSort.key === key ? { key, dir: currentSort.dir * -1 } : { key, dir: 1 };
+  renderPatientsTable();
+}
+
+// Statistiques résumées, calculées sur l'ensemble ACTUELLEMENT filtré (pas
+// sur tout le projet) — pour toujours refléter ce qui est réellement affiché.
+function computeSummaryStats(rows) {
+  const withSex = rows.filter(r => r.sex === 'M' || r.sex === 'F');
+  const female = withSex.filter(r => r.sex === 'F').length;
+  const male = withSex.filter(r => r.sex === 'M').length;
+  const sexLabel = withSex.length
+    ? `${Math.round((female / withSex.length) * 100)}% F · ${Math.round((male / withSex.length) * 100)}% M`
+    : null;
+
+  const ages = rows.map(r => computeAgePat(r.date_of_birth)).filter(a => a !== null);
+  const ageLabel = ages.length
+    ? `moy. ${formatAgePat(Math.round(ages.reduce((sum, a) => sum + a, 0) / ages.length))}`
+    : null;
+
+  let statusLabel = null;
+  const withStatus = rows.filter(r => r.referral_status);
+  if (withStatus.length) {
+    const admitted = withStatus.filter(r => r.referral_status === 'admitted').length;
+    const notAdmitted = withStatus.length - admitted;
+    statusLabel = `${Math.round((admitted / withStatus.length) * 100)}% admis · ${Math.round((notAdmitted / withStatus.length) * 100)}% non admis`;
+  }
+
+  return { sexLabel, ageLabel, statusLabel };
+}
+
+function renderPatientsTable() {
+  const wrap = document.getElementById('patients-table-wrap');
+  const statusFilter = document.getElementById('filter-status').value;
+  let rows = statusFilter ? lastLoadedRows.filter(r => r.referral_status === statusFilter) : lastLoadedRows;
+  rows = sortRows(rows);
+
+  document.getElementById('patients-count-row').classList.remove('hidden');
+  document.getElementById('patients-count-label').textContent =
+    `${rows.length} patient${rows.length === 1 ? '' : 's'} trouvé${rows.length === 1 ? '' : 's'}`;
+
+  if (rows.length === 0) {
+    wrap.innerHTML = '<p style="color:var(--ink-muted);">Aucun patient ne correspond à ces filtres.</p>';
+    return;
+  }
+
+  const stats = computeSummaryStats(rows);
+  const arrow = (key) => currentSort.key === key ? (currentSort.dir === 1 ? ' ▲' : ' ▼') : '';
+
+  let html = `<table class="data-table"><thead><tr>
+      <th style="width:48px;">#</th>
+      <th>Patient</th>
+      <th>Code anonyme</th>
+      <th class="sortable-th" data-sort-key="sex">Sexe${arrow('sex')}${stats.sexLabel ? ` <span class="th-stat">(${stats.sexLabel})</span>` : ''}</th>
+      <th class="sortable-th" data-sort-key="age">Âge${arrow('age')}${stats.ageLabel ? ` <span class="th-stat">(${stats.ageLabel})</span>` : ''}</th>
+      ${currentFormHasReferral ? `<th>Statut Suivi${stats.statusLabel ? ` <span class="th-stat">(${stats.statusLabel})</span>` : ''}</th>` : ''}
+    </tr></thead><tbody>`;
+  rows.forEach((r, idx) => {
+    const age = formatAgePat(computeAgePat(r.date_of_birth));
+    html += `<tr class="patient-row" data-patient-id="${r.patient_id}">
+      <td>${idx + 1}</td>
+      <td>${escapeHtmlPat(r.patient_name)}</td>
+      <td>${r.anonymous_code || '—'}</td>
+      <td>${r.sex || '—'}</td>
+      <td>${age !== null ? age : '—'}</td>
+      ${currentFormHasReferral ? `<td>${r.referral_status ? `<span class="status-badge ${r.referral_status}">${statusLabelPat(r.referral_status)}</span>` : '—'}</td>` : ''}
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('.sortable-th').forEach(th => {
+    th.addEventListener('click', () => toggleSort(th.dataset.sortKey));
+  });
+  wrap.querySelectorAll('.patient-row').forEach(row => {
+    row.addEventListener('click', () => openPatientInfoModal(row.dataset.patientId));
+  });
+}
+
+/* ── Impression et export de la liste actuellement affichée ── */
+
+function getVisibleSortedRows() {
+  const statusFilter = document.getElementById('filter-status').value;
+  const rows = statusFilter ? lastLoadedRows.filter(r => r.referral_status === statusFilter) : lastLoadedRows;
+  return sortRows(rows);
+}
+
+function csvEscape(value) {
+  const s = String(value ?? '');
+  return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+document.getElementById('patients-export-btn').addEventListener('click', () => {
+  const rows = getVisibleSortedRows();
+  const headers = ['Patient', 'Code anonyme', 'Sexe', 'Âge'];
+  if (currentFormHasReferral) headers.push('Statut Suivi');
+
+  const lines = [headers.map(csvEscape).join(';')];
+  rows.forEach(r => {
+    const age = formatAgePat(computeAgePat(r.date_of_birth));
+    const line = [r.patient_name, r.anonymous_code || '', r.sex || '', age !== null ? age : ''];
+    if (currentFormHasReferral) line.push(r.referral_status ? statusLabelPat(r.referral_status) : '');
+    lines.push(line.map(csvEscape).join(';'));
+  });
+
+  // BOM UTF-8 + séparateur ";" : même convention que les autres exports de
+  // l'application, pour qu'Excel en français affiche correctement les accents.
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'patients.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('patients-print-btn').addEventListener('click', () => {
+  const rows = getVisibleSortedRows();
+  const stats = computeSummaryStats(rows);
+  const projectName = document.getElementById('filter-project').selectedOptions[0]?.textContent || '';
+  const formName = document.getElementById('filter-form').selectedOptions[0]?.textContent || 'Tous les formulaires';
+  const statusName = document.getElementById('filter-status').selectedOptions[0]?.textContent || 'Tous les statuts';
+
+  let html = `<h1>Patients enrôlés</h1>
+    <p>Projet : ${escapeHtmlPat(projectName)} — Formulaire : ${escapeHtmlPat(formName)}${currentFormHasReferral ? ` — Statut : ${escapeHtmlPat(statusName)}` : ''}</p>
+    <p>${rows.length} patient(s)${stats.sexLabel ? ` · Sexe : ${stats.sexLabel}` : ''}${stats.ageLabel ? ` · Âge ${stats.ageLabel}` : ''}${stats.statusLabel ? ` · Statut Suivi : ${stats.statusLabel}` : ''}</p>
+    <table><thead><tr><th>#</th><th>Patient</th><th>Code anonyme</th><th>Sexe</th><th>Âge</th>${currentFormHasReferral ? '<th>Statut Suivi</th>' : ''}</tr></thead><tbody>`;
+  rows.forEach((r, idx) => {
+    const age = formatAgePat(computeAgePat(r.date_of_birth));
+    html += `<tr><td>${idx + 1}</td><td>${escapeHtmlPat(r.patient_name)}</td><td>${r.anonymous_code || '—'}</td><td>${r.sex || '—'}</td><td>${age !== null ? age : '—'}</td>${currentFormHasReferral ? `<td>${r.referral_status ? statusLabelPat(r.referral_status) : '—'}</td>` : ''}</tr>`;
+  });
+  html += '</tbody></table>';
+
+  document.getElementById('print-content').innerHTML = html;
+  window.print();
+});
+
+async function openPatientInfoModal(patientId) {
+  const [pRes, casesRes] = await Promise.all([
+    fetch(`/api/patients/${patientId}`, { credentials: 'same-origin' }),
+    fetch(`/api/patients/${patientId}/cases`, { credentials: 'same-origin' }),
+  ]);
+  if (!pRes.ok) { alert('Fiche patient introuvable.'); return; }
+  const patient = await pRes.json();
+  const cases = casesRes.ok ? await casesRes.json() : [];
+  const relevantCase = cases.find(c => c.status === 'active') || cases[0] || null;
+
+  document.getElementById('pinfo-name').textContent = `${patient.first_name} ${patient.last_name}`;
+  document.getElementById('pinfo-code').textContent = patient.anonymous_code || 'Non attribué';
+  document.getElementById('pinfo-sex').textContent = patient.sex || 'Non renseigné';
+  const age = formatAgePat(computeAgePat(patient.date_of_birth));
+  document.getElementById('pinfo-dob').textContent = patient.date_of_birth
+    ? `${formatDatePat(patient.date_of_birth)}${age !== null ? ` (${age})` : ''}`
+    : 'Non renseignée';
+  document.getElementById('pinfo-phone').textContent = patient.phone || 'Non renseigné';
+  document.getElementById('pinfo-case').textContent = relevantCase
+    ? `${relevantCase.case_number}${relevantCase.status !== 'active' ? ` (${relevantCase.status === 'closed' ? 'clôturé' : 'perdu de vue'})` : ''}`
+    : 'Aucun dossier de suivi';
+
+  document.getElementById('patient-info-modal-overlay').classList.add('open');
+}
+
+document.getElementById('pinfo-close-btn').addEventListener('click', () => {
+  document.getElementById('patient-info-modal-overlay').classList.remove('open');
+});
+document.getElementById('patient-info-modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'patient-info-modal-overlay') e.target.classList.remove('open');
+});
+</script>
+
+</body>
+</html>

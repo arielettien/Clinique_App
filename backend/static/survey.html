@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enquête — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .survey-header { margin-bottom: var(--space-2); }
+  .survey-header h1 { margin: 0 0 var(--space-1) 0; }
+  .survey-header .desc { color: var(--ink-muted); font-size: 0.9rem; margin-bottom: var(--space-4); }
+
+  .chart-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: var(--space-5); margin-bottom: var(--space-5);
+  }
+  .chart-title { font-size: 0.95rem; font-weight: 600; margin-bottom: var(--space-4); display: flex; align-items: center; gap: var(--space-2); }
+  .mini-chart { display: flex; align-items: flex-end; gap: 8px; height: 140px; padding-top: 10px; }
+  .mini-bar {
+    flex: 1; background: var(--primary); border-radius: 4px 4px 0 0; min-height: 4px;
+    opacity: 0.85; transition: opacity 0.2s; position: relative;
+  }
+  .mini-bar:hover { opacity: 1; }
+  .mini-bar .tip {
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; font-size: 0.7rem; padding: 2px 6px;
+    border-radius: 4px; white-space: nowrap; opacity: 0; pointer-events: none;
+    transition: opacity 0.15s; margin-bottom: 4px;
+  }
+  .mini-bar:hover .tip { opacity: 1; }
+  .mini-xlabels { display: flex; gap: 8px; margin-top: 6px; }
+  .mini-xlabels span { flex: 1; text-align: center; font-size: 0.7rem; color: var(--ink-faint); }
+
+  .quick-links { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+  .module-search-wrap { position: relative; max-width: 420px; margin-bottom: var(--space-4); }
+  .module-search-wrap input {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+    font-size: 0.9rem; background: var(--surface);
+  }
+  .module-search-dropdown {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 40; margin-top: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md); max-height: 320px; overflow-y: auto; padding: 6px;
+  }
+  .module-search-dropdown a.patient-match-item {
+    display: block; text-decoration: none; color: var(--ink); padding: 8px 10px;
+    border-radius: var(--radius-sm); border: 1px solid transparent;
+  }
+  .module-search-dropdown a.patient-match-item:hover { border-color: var(--primary); background: var(--primary-soft); }
+
+  .form-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .form-actions a, .form-actions button {
+    font-size: 0.85rem; text-decoration: none; padding: 5px 10px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--ink);
+    display: inline-flex; align-items: center; gap: 5px; transition: background var(--transition-fast);
+  }
+  .form-actions a:hover, .form-actions button:hover { background: var(--surface-muted); }
+  .form-actions a.primary-link { background: var(--primary); color: white; border-color: var(--primary); }
+  .form-actions a.primary-link:hover { background: var(--primary-dark); }
+  .form-actions a.data-link { color: var(--primary); border: none; background: transparent; padding: 5px 4px; }
+  .form-actions a.data-link:hover { text-decoration: underline; background: transparent; }
+
+  .data-toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .data-help {
+    background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 12px 16px; font-size: 0.85rem; color: var(--ink-muted); margin-bottom: 16px; line-height: 1.5;
+    display: flex; align-items: center; gap: var(--space-2);
+  }
+  #data-table-wrap { overflow-x: auto; }
+
+  /* Filtre de colonne façon Excel */
+  .data-table th { position: relative; }
+  .th-content { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .col-filter-btn {
+    background: none; border: none; cursor: pointer; padding: 2px 4px; font-size: 0.75rem;
+    color: var(--ink-faint); border-radius: 3px;
+  }
+  .col-filter-btn:hover { background: var(--border); }
+  .col-filter-btn.active { color: var(--primary); font-weight: 700; }
+  .col-filter-popup {
+    position: absolute; top: 100%; left: 0; z-index: 50; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md);
+    padding: 10px; min-width: 200px; max-width: 280px; font-weight: normal; white-space: normal;
+  }
+  .col-filter-popup .filter-values { max-height: 220px; overflow-y: auto; margin: 8px 0; }
+  .col-filter-popup label { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; padding: 3px 0; font-weight: normal; }
+  .col-filter-popup .filter-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .col-filter-popup .filter-actions button { font-size: 0.78rem; padding: 4px 8px; }
+  .col-filter-popup .select-all-row { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 4px; font-weight: 600; }
+
+  .bulk-actions-bar {
+    display: flex; align-items: center; gap: 12px; background: var(--surface-muted);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 10px;
+  }
+  .row-checkbox, .select-all-checkbox { cursor: pointer; }
+
+  .error-msg { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.9rem; display: flex; align-items: center; gap: var(--space-2); }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface); border-radius: var(--radius-md); padding: var(--space-5);
+    width: 90%; max-width: 420px; box-shadow: var(--shadow-md);
+  }
+  .modal-box h3 { margin-top: 0; }
+  .form-picker-list { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-4) 0; max-height: 320px; overflow-y: auto; }
+  .form-picker-item {
+    display: block; width: 100%; text-align: left; box-sizing: border-box;
+    padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink); font-size: 0.9rem; cursor: pointer; font-family: var(--font-body);
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+  }
+  .form-picker-item:hover { border-color: var(--primary); background: var(--primary-soft); }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb">
+      <a href="/">Tous les projets</a> / <a id="breadcrumb-hub" href="#">…</a> / <span>Enquête</span>
+    </div>
+
+    <div class="survey-header">
+      <h1 id="project-name">Chargement…</h1>
+      <p class="desc" id="project-description"></p>
+    </div>
+
+    <div class="module-search-wrap">
+      <input type="text" id="module-search-input" placeholder="🔎 Rechercher un patient (nom, téléphone)…" autocomplete="off">
+      <div id="module-search-results" class="module-search-dropdown hidden"></div>
+    </div>
+
+    <div id="error-box"></div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="summary">SOMMAIRE</button>
+      <button class="tab-btn" data-tab="forms">FORMULAIRE</button>
+      <button class="tab-btn" data-tab="data">DONNÉES</button>
+      <button class="tab-btn" data-tab="settings">PARAMÈTRES</button>
+    </div>
+
+    <!-- ═════════════════ SOMMAIRE ═════════════════ -->
+    <div class="tab-panel active" id="tab-summary">
+      <div class="stats-grid">
+        <div class="stat-box"><div class="val" id="stat-forms">0</div><div class="lbl">Formulaires</div></div>
+        <div class="stat-box"><div class="val" id="stat-subs">0</div><div class="lbl">Soumissions</div></div>
+        <div class="stat-box"><div class="val" id="stat-last">—</div><div class="lbl">Dernière soumission</div></div>
+        <div class="stat-box"><div class="val" id="stat-today">0</div><div class="lbl">Aujourd'hui</div></div>
+      </div>
+
+      <div class="chart-box">
+        <div class="chart-title"><span class="icon-slot" data-icon="bar-chart-3"></span> Soumissions sur les 7 derniers jours</div>
+        <div class="mini-chart" id="mini-chart"></div>
+        <div class="mini-xlabels" id="mini-xlabels"></div>
+      </div>
+
+      <h3 style="font-size:1rem;margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span class="icon-slot" data-icon="link"></span> Raccourcis rapides</h3>
+      <div class="quick-links">
+        <a class="quick-link" href="#" id="ql-collect"><span class="left"><span class="icon-slot" data-icon="clipboard-list"></span> Nouvelle collecte</span><span class="arrow">›</span></a>
+        <a class="quick-link" href="#" id="ql-edit"><span class="left"><span class="icon-slot" data-icon="pencil"></span> Modifier le formulaire</span><span class="arrow">›</span></a>
+        <a class="quick-link" href="#" id="ql-preview"><span class="left"><span class="icon-slot" data-icon="eye"></span> Aperçu du formulaire</span><span class="arrow">›</span></a>
+        <a class="quick-link" href="#" id="ql-export" onclick="switchTab('data'); return false;"><span class="left"><span class="icon-slot" data-icon="download"></span> Exporter les données</span><span class="arrow">›</span></a>
+      </div>
+    </div>
+
+    <!-- ═════════════════ FORMULAIRE ═════════════════ -->
+    <div class="tab-panel" id="tab-forms">
+      <div id="form-admin-actions" style="display:flex;gap:10px;margin-bottom:18px;">
+        <a class="btn btn-primary" id="btn-create-form" href="/form_builder.html">+ Créer un nouveau formulaire</a>
+        <button class="btn btn-secondary" onclick="importForm()">⬆️ Importer un formulaire (Excel)</button>
+      </div>
+      <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImport(this)">
+      <div id="forms-list"></div>
+    </div>
+
+    <!-- ═════════════════ DONNÉES ═════════════════ -->
+    <div class="tab-panel" id="tab-data">
+      <div class="data-help">
+        <span class="icon-slot" data-icon="lightbulb"></span> <strong>Onglet DONNÉES</strong> — Sélectionnez un formulaire ci-dessous pour voir <strong>toutes ses soumissions</strong> dans un tableau, les filtrer et les exporter en CSV ou Excel.
+      </div>
+      <div class="data-toolbar">
+        <select id="data-form-select" class="form-input" style="width:260px;">
+          <option value="">Choisir un formulaire…</option>
+        </select>
+      </div>
+
+      <div class="data-toolbar" style="margin-top:-6px;">
+        <span style="font-size:0.85rem; color:var(--ink-muted);">Période :</span>
+        <button type="button" class="btn btn-secondary btn-sm period-btn" data-period="2y">2 dernières années</button>
+        <button type="button" class="btn btn-secondary btn-sm period-btn" data-period="3y">3 dernières années</button>
+        <button type="button" class="btn btn-secondary btn-sm period-btn" data-period="all">Tout</button>
+        <input type="date" id="period-start" class="form-input" style="width:150px;">
+        <span style="color:var(--ink-muted);">→</span>
+        <input type="date" id="period-end" class="form-input" style="width:150px;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="applyCustomPeriod()">Appliquer</button>
+      </div>
+
+      <div class="data-toolbar">
+        <button class="btn btn-primary" onclick="exportCurrentData()">⬇️ Exporter dépistages (CSV)</button>
+        <button class="btn btn-secondary" onclick="exportCurrentDataXlsx()">⬇️ Excel</button>
+        <button class="btn btn-secondary" onclick="exportPatientsData('csv')">⬇️ Exporter personnes (CSV, anonymisé)</button>
+        <button class="btn btn-secondary" onclick="exportPatientsData('xlsx')">⬇️ Excel</button>
+      </div>
+
+      <div class="bulk-actions-bar" id="bulk-actions-bar" style="display:none;">
+        <span class="bulk-count"></span>
+        <button class="btn btn-danger btn-sm" onclick="deleteSelectedSubmissions()"><span class="icon-slot" data-icon="trash-2"></span> Supprimer la sélection</button>
+        <button class="btn btn-ghost btn-sm" onclick="resetAllColumnFilters()" id="reset-filters-btn" style="display:none;"><span class="icon-slot" data-icon="x"></span> Réinitialiser les filtres de colonnes</button>
+      </div>
+      <div id="data-table-wrap"></div>
+      <div class="pagination" id="data-pagination"></div>
+
+      <div class="card" style="margin-top:20px;">
+        <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;"><span class="icon-slot" data-icon="trending-up"></span> Tendance — dépistages vs personnes différentes</h3>
+        <p class="field-hint" style="margin-top:-6px;">Une même personne dépistée plusieurs fois ne compte qu'une seule fois dans « personnes différentes ».</p>
+        <div id="trend-summary" style="color:var(--ink-muted);">Choisis un formulaire et une période ci-dessus.</div>
+        <div id="trend-table-wrap"></div>
+      </div>
+
+      <div class="card" style="margin-top:20px;">
+        <h3 style="margin-top:0;display:flex;align-items:center;gap:8px;"><span class="icon-slot" data-icon="search"></span> Détecteur de changement de statut</h3>
+        <p class="field-hint" style="margin-top:-6px;">Ex : qui est passé de « négatif » à « positif » (ou « suspect ») entre deux dépistages ? Coche une ou plusieurs valeurs.</p>
+        <div class="data-toolbar">
+          <select id="detector-field" class="form-input" style="width:220px;"><option value="">Champ à surveiller…</option></select>
+          <button type="button" class="btn btn-primary btn-sm" onclick="runStatusChangeDetector()">Rechercher</button>
+        </div>
+        <div id="detector-value-container" style="margin:8px 0 12px 0;"></div>
+        <div id="detector-results"></div>
+        <div id="detector-download-wrap" class="hidden" style="margin-top:10px;">
+          <a class="btn btn-secondary btn-sm" id="detector-download-csv" href="#" target="_blank">⬇️ Télécharger ces résultats (CSV)</a>
+          <a class="btn btn-secondary btn-sm" id="detector-download-xlsx" href="#" target="_blank">⬇️ Excel</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═════════════════ PARAMÈTRES ═════════════════ -->
+    <div class="tab-panel" id="tab-settings">
+      <div class="settings-section">
+        <h3><span class="icon-slot" data-icon="settings"></span> Général</h3>
+        <div class="settings-row">
+          <label>Nom du projet (requis)</label>
+          <input type="text" id="set-name" class="form-input">
+        </div>
+        <div class="settings-row">
+          <label>Description</label>
+          <input type="text" id="set-desc" class="form-input">
+        </div>
+        <button class="btn btn-primary" onclick="saveSettings()"><span class="icon-slot" data-icon="save"></span> Sauvegarder les modifications</button>
+      </div>
+
+      <div class="settings-section">
+        <h3 style="margin-top:0;">Export du projet</h3>
+        <p style="font-size:0.88rem;color:var(--ink-muted);margin-bottom:12px;">
+          Fiche résumé (nom, description, compteurs) — pour les données détaillées, utilise l'export par formulaire (onglet DONNÉES) ou l'export des dossiers (Module Suivi).
+        </p>
+        <a class="btn btn-secondary btn-sm" id="export-project-csv" href="#" target="_blank">Exporter (CSV)</a>
+        <a class="btn btn-secondary btn-sm" id="export-project-xlsx" href="#" target="_blank">Excel</a>
+      </div>
+
+      <div class="settings-section danger-zone" id="danger-zone-section">
+        <h3><span class="icon-slot" data-icon="triangle-alert"></span> Zone dangereuse</h3>
+        <p style="font-size:0.88rem;color:var(--ink-muted);margin-bottom:12px;">
+          Archiver le projet empêche les nouvelles soumissions. La suppression est définitive.
+        </p>
+        <button class="btn btn-archive" onclick="archiveProject()" style="margin-right:10px;"><span class="icon-slot" data-icon="package"></span> Archiver le projet</button>
+        <button class="btn btn-danger" onclick="deleteProject()"><span class="icon-slot" data-icon="trash-2"></span> Supprimer le projet et les données</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="modal-overlay" id="form-picker-overlay">
+  <div class="modal-box">
+    <h3 id="form-picker-title">Choisir un formulaire</h3>
+    <div class="form-picker-list" id="form-picker-list"></div>
+    <button class="btn btn-ghost" onclick="closeFormPicker()">Annuler</button>
+  </div>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const projectId = params.get('project_id');
+const initialTab = params.get('tab');
+const initialFormId = params.get('form_id');
+let currentProject = null;
+let currentForms = [];
+let currentFormId = null;
+let currentUserRole = null;
+let currentFormFields = [];
+let dataPage = 1;
+let dataPageSize = 30;
+let dataTotal = 0;
+let dataColumnFilters = {};   // { columnKey: Set(valeurs autorisées) }
+let dataSelectedIds = new Set();
+let dataAllRowsCache = [];    // dernier jeu complet chargé, pour construire les popups de filtre
+let periodStart = null;
+let periodEnd = null;
+
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  if (box) box.innerHTML = '<div class="error-msg">' + (window.icon ? icon('triangle-alert') : '') + ' ' + msg + '</div>';
+}
+
+if (!projectId) {
+  document.body.innerHTML = '<p style="padding:40px;">Aucun projet sélectionné. <a href="/">Retour</a></p>';
+}
+
+/* ── Tabs ── */
+// Fonction partagée entre le clic manuel sur un onglet et la restauration
+// d'un onglet précis (avec formulaire déjà choisi) depuis l'URL — voir
+// restoreInitialTab() plus bas, appelée quand on revient depuis Historique.
+async function activateTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'forms') await loadFormsList();
+  if (name === 'data') await loadDataFormSelect();
+  if (name === 'summary') await loadSummary();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+});
+
+async function restoreInitialTab() {
+  if (!initialTab) return;
+  await activateTab(initialTab);
+  if (initialTab === 'data' && initialFormId) {
+    const sel = document.getElementById('data-form-select');
+    if (sel && [...sel.options].some(o => o.value === initialFormId)) {
+      sel.value = initialFormId;
+      await onDataFormSelected();
+    }
+  }
+}
+
+/* ── Recherche générale du module (point 6) ── */
+let moduleSearchTimeout = null;
+document.getElementById('module-search-input').addEventListener('input', () => {
+  clearTimeout(moduleSearchTimeout);
+  moduleSearchTimeout = setTimeout(runModuleSearch, 350);
+});
+document.getElementById('module-search-input').addEventListener('focus', () => {
+  if (document.getElementById('module-search-input').value.trim().length >= 2) runModuleSearch();
+});
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.module-search-wrap');
+  if (wrap && !wrap.contains(e.target)) document.getElementById('module-search-results').classList.add('hidden');
+});
+
+async function runModuleSearch() {
+  const query = document.getElementById('module-search-input').value.trim();
+  const box = document.getElementById('module-search-results');
+  if (query.length < 2) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+
+  let matches = [];
+  try {
+    const res = await fetch(`/api/patients?project_id=${projectId}&search=${encodeURIComponent(query)}`, { credentials: 'same-origin' });
+    matches = res.ok ? await res.json() : [];
+  } catch (netErr) {
+    // Hors ligne : recherche dans les patients déjà mis en cache pour ce projet.
+    if (window.getCachedPatients) {
+      const q = query.toLowerCase();
+      matches = (await getCachedPatients(projectId)).filter(p =>
+        `${p.first_name} ${p.last_name}`.toLowerCase().includes(q) || (p.phone || '').includes(query)
+      ).slice(0, 8);
+    }
+  }
+
+  if (matches.length === 0) {
+    box.innerHTML = '<p style="padding:8px 10px; color:var(--ink-muted); margin:0; font-size:0.85rem;">Aucun patient trouvé.</p>';
+    box.classList.remove('hidden');
+    return;
+  }
+  box.innerHTML = matches.map(p => `
+    <a href="/history.html?patient_id=${p.id}" class="patient-match-item">
+      ${escapeHtmlSurvey(p.first_name)} ${escapeHtmlSurvey(p.last_name)}${p.phone ? ` <span style="color:var(--ink-muted);">· ${escapeHtmlSurvey(p.phone)}</span>` : ''}
+    </a>
+  `).join('');
+  box.classList.remove('hidden');
+}
+
+/* ── Chargement immédiat du projet (indépendant de initAppShell) ── */
+(async () => {
+  if (!projectId) return;
+  // Lien "retour" fonctionnel DÈS MAINTENANT (project_id est déjà connu via
+  // l'adresse) — ne pas attendre la fin d'un appel réseau qui pourrait
+  // échouer (page introuvable, hors-ligne) : sans ça, ce lien restait sur
+  // "#" (un lien mort) dans ces cas, laissant le bouton "précédent" du
+  // navigateur comme seul recours.
+  document.getElementById('breadcrumb-hub').href = `/project_hub.html?project_id=${projectId}`;
+  if (window.loadOfflineScripts) await loadOfflineScripts();
+
+  // Étape 1 : Charger le projet immédiatement pour afficher le titre
+  try {
+    const res = await fetch(`/api/projects/${projectId}`, { credentials: 'same-origin' });
+    if (!res.ok) {
+      showError('Projet introuvable (ID: ' + projectId.slice(0,8) + '...)');
+      document.getElementById('project-name').textContent = 'Projet introuvable';
+      return;
+    }
+    currentProject = await res.json();
+
+    // Met à jour le titre IMMÉDIATEMENT
+    document.getElementById('project-name').textContent = currentProject.name;
+    document.getElementById('project-description').textContent = currentProject.description || '';
+    document.getElementById('breadcrumb-hub').href = `/project_hub.html?project_id=${projectId}`;
+    document.getElementById('breadcrumb-hub').textContent = currentProject.name;
+    document.title = currentProject.name + ' — Enquête';
+    document.getElementById('set-name').value = currentProject.name;
+    document.getElementById('set-desc').value = currentProject.description || '';
+    document.getElementById('export-project-csv').href = `/api/projects/${projectId}/export?format=csv`;
+    document.getElementById('export-project-xlsx').href = `/api/projects/${projectId}/export?format=xlsx`;
+    document.getElementById('btn-create-form').href = `/form_builder.html?project_id=${projectId}`;
+
+  } catch (err) {
+    // Hors-ligne (ou serveur injoignable) : on n'abandonne PAS ici — sans ça,
+    // la sidebar (et son indicateur hors-ligne) ne s'afficherait jamais.
+    // On retombe sur le nom mis en cache la dernière fois que la page a été
+    // visitée en ligne, plutôt qu'un écran d'erreur bloquant.
+    console.error('Erreur chargement projet:', err);
+    const cachedInfo = window.getCachedProjectInfo ? await getCachedProjectInfo(projectId) : null;
+    document.getElementById('project-name').textContent = cachedInfo ? cachedInfo.name : 'Projet (hors ligne)';
+    document.getElementById('project-description').textContent = cachedInfo ? (cachedInfo.description || '') : '';
+    document.title = (cachedInfo ? cachedInfo.name : 'Enquête') + ' — Enquête';
+  }
+
+  // Étape 2 : Charger initAppShell en parallèle (pour la sidebar)
+  try {
+    const user = await initAppShell(projectId);
+    if (!user) {
+      showError('Session expirée. Veuillez vous reconnecter.');
+      return;
+    }
+    currentUserRole = user.role;
+    // Archiver/Supprimer un projet reste réservé aux admins côté serveur ;
+    // on évite en plus de proposer un bouton qui échouerait à coup sûr.
+    if (user.role !== 'admin') {
+      const dangerZone = document.getElementById('danger-zone-section');
+      if (dangerZone) dangerZone.style.display = 'none';
+    }
+  } catch (err) {
+    console.error('Erreur initAppShell:', err);
+    // On continue quand même, la sidebar peut ne pas être parfaite
+  }
+  if (window.cacheProjectForOffline) cacheProjectForOffline(projectId);
+  renderIconSlots(document);
+
+  // Étape 3 : Charger les stats, sauf si on revient directement sur un onglet
+  // précis (ex: DONNÉES avec un formulaire déjà choisi) — dans ce cas on
+  // saute le SOMMAIRE par défaut pour ne pas le charger inutilement.
+  if (!initialTab) {
+    try {
+      await loadSummary();
+    } catch (err) {
+      console.error('Erreur loadSummary:', err);
+      showError('Erreur de chargement des statistiques.');
+    }
+  } else {
+    try {
+      await restoreInitialTab();
+    } catch (err) {
+      console.error('Erreur restauration onglet initial:', err);
+    }
+  }
+})();
+
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => setPeriodPreset(btn.dataset.period));
+});
+
+/* ═════════════════ SOMMAIRE ═════════════════ */
+async function loadSummary() {
+  if (!projectId) return;
+
+  const fRes = await fetch(`/api/forms?project_id=${projectId}`, { credentials: 'same-origin' });
+  const allForms = fRes.ok ? await fRes.json() : [];
+  // Le tableau de bord Enquête ne doit refléter que l'activité d'Enquête —
+  // les formulaires de Suivi (visite/clôture) ont déjà leur propre tableau
+  // de bord dans le Module Suivi, pas besoin de les compter deux fois ici.
+  const forms = allForms.filter(f => f.form_type === 'survey');
+  currentForms = forms;
+
+  document.getElementById('stat-forms').textContent = forms.length;
+
+  let totalSubs = 0;
+  let lastDate = null;
+  let todayCount = 0;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const days7 = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days7[d.toISOString().slice(0, 10)] = 0;
+  }
+
+  for (const form of forms) {
+    const sr = await fetch(`/api/forms/${form.id}/submissions`, { credentials: 'same-origin' });
+    if (!sr.ok) continue;
+    const subsPayload = await sr.json();
+    const subs = subsPayload.submissions || [];
+    totalSubs += subs.length;
+    for (const sub of subs) {
+      const d = new Date(sub.collected_at).toISOString().slice(0, 10);
+      if (days7.hasOwnProperty(d)) days7[d]++;
+      if (d === todayStr) todayCount++;
+      if (!lastDate || new Date(sub.collected_at) > new Date(lastDate)) lastDate = sub.collected_at;
+    }
+  }
+  document.getElementById('stat-subs').textContent = totalSubs;
+  document.getElementById('stat-today').textContent = todayCount;
+  document.getElementById('stat-last').textContent = lastDate ? new Date(lastDate).toLocaleDateString('fr-FR') : '—';
+
+  // Mini chart
+  const chartEl = document.getElementById('mini-chart');
+  const labelEl = document.getElementById('mini-xlabels');
+  chartEl.innerHTML = ''; labelEl.innerHTML = '';
+  const maxVal = Math.max(...Object.values(days7), 1);
+  const dayLabels = ['D','L','M','M','J','V','S'];
+  let dayIdx = new Date().getDay();
+  Object.entries(days7).forEach(([date, val], i) => {
+    const bar = document.createElement('div');
+    bar.className = 'mini-bar';
+    bar.style.height = `${(val / maxVal) * 100}%`;
+    bar.innerHTML = `<span class="tip">${val}</span>`;
+    chartEl.appendChild(bar);
+    const lbl = document.createElement('span');
+    lbl.textContent = dayLabels[(dayIdx - 6 + i + 7) % 7];
+    labelEl.appendChild(lbl);
+  });
+
+  // Quick links
+  if (forms.length === 0) {
+    document.getElementById('ql-collect').onclick = () => alert("Créez d'abord un formulaire.");
+    document.getElementById('ql-edit').onclick = () => alert("Créez d'abord un formulaire.");
+    document.getElementById('ql-preview').onclick = () => alert("Créez d'abord un formulaire.");
+  } else if (forms.length === 1) {
+    const only = forms[0];
+    document.getElementById('ql-collect').href = `/submission.html?form_id=${only.id}`;
+    document.getElementById('ql-edit').href = `/form_builder.html?form_id=${only.id}&project_id=${projectId}`;
+    document.getElementById('ql-preview').href = `/submission.html?form_id=${only.id}&preview=1`;
+  } else {
+    // Plusieurs formulaires : demander lequel plutôt que de choisir le premier au hasard.
+    document.getElementById('ql-collect').removeAttribute('href');
+    document.getElementById('ql-edit').removeAttribute('href');
+    document.getElementById('ql-preview').removeAttribute('href');
+    document.getElementById('ql-collect').onclick = (e) => { e.preventDefault(); openFormPicker(forms, 'Choisir un formulaire à remplir', f => `/submission.html?form_id=${f.id}`); };
+    document.getElementById('ql-edit').onclick = (e) => { e.preventDefault(); openFormPicker(forms, 'Choisir un formulaire à modifier', f => `/form_builder.html?form_id=${f.id}&project_id=${projectId}`); };
+    document.getElementById('ql-preview').onclick = (e) => { e.preventDefault(); openFormPicker(forms, 'Choisir un formulaire à prévisualiser', f => `/submission.html?form_id=${f.id}&preview=1`); };
+  }
+}
+
+function openFormPicker(forms, title, buildUrl) {
+  document.getElementById('form-picker-title').textContent = title;
+  const list = document.getElementById('form-picker-list');
+  list.innerHTML = forms.map(f => `<button type="button" class="form-picker-item" onclick="window.location.href='${buildUrl(f)}'">${escapeHtmlSurvey(f.name)}</button>`).join('');
+  document.getElementById('form-picker-overlay').classList.add('open');
+}
+
+function closeFormPicker() {
+  document.getElementById('form-picker-overlay').classList.remove('open');
+}
+
+function switchTab(name) {
+  const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  if (btn) btn.click();
+}
+
+/* ═════════════════ FORMULAIRE ═════════════════ */
+async function loadFormsList() {
+  const container = document.getElementById('forms-list');
+  let forms;
+  let fromCache = false;
+  try {
+    const res = await fetch(`/api/forms?project_id=${projectId}`, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('réponse non OK');
+    forms = await res.json();
+  } catch (e) {
+    // Hors-ligne (ou serveur injoignable) : on retombe sur la dernière liste
+    // mise en cache. Lecture seule — remplir/modifier reste impossible sans
+    // connexion pour l'instant.
+    if (!window.getCachedForms) { container.innerHTML = '<p style="color:var(--ink-muted);">Hors ligne — aucune donnée locale disponible pour l\'instant.</p>'; return; }
+    forms = await getCachedForms(projectId);
+    fromCache = true;
+  }
+  currentForms = forms;
+  container.innerHTML = '';
+
+  if (fromCache) {
+    const lastCached = window.getLastCachedAt ? await getLastCachedAt(projectId) : null;
+    const banner = document.createElement('div');
+    banner.className = 'error-msg';
+    banner.style.cssText = 'background:var(--sev-medium-bg);border-color:var(--sev-medium-border);color:var(--sev-medium-fg);';
+    banner.textContent = lastCached
+      ? `Hors ligne — dernière mise à jour connue : ${new Date(lastCached).toLocaleString('fr-FR')}. Lecture seule pour l'instant.`
+      : "Hors ligne — liste non garantie à jour. Lecture seule pour l'instant.";
+    container.appendChild(banner);
+  }
+
+  const isAdmin = currentUserRole === 'admin' && !fromCache;
+  const adminActionsBar = document.getElementById('form-admin-actions');
+  if (adminActionsBar) adminActionsBar.style.display = isAdmin ? 'flex' : 'none';
+
+  if (forms.length === 0) {
+    container.innerHTML += '<div class="empty-state"><span class="empty-icon">' + (window.icon ? icon('clipboard-list') : '') + '</span>Aucun formulaire.' + (isAdmin ? ' Créez-en un ci-dessus.' : ' Demande à un administrateur d\'en créer un.') + '</div>';
+    return;
+  }
+  for (const f of forms) {
+    const div = document.createElement('div');
+    div.className = 'form-list-card';
+    div.innerHTML = `
+      <div class="form-name">${f.name}</div>
+      <div class="form-actions">
+        <a class="primary-link" href="/submission.html?form_id=${f.id}">${icon('clipboard-list')} Remplir</a>
+        <a class="data-link" href="/form_data.html?form_id=${f.id}">${icon('bar-chart-3')} Données</a>
+        <a class="data-link" href="/api/forms/${f.id}/export-template" target="_blank">${icon('download')} Structure</a>
+        ${isAdmin ? `
+        <a class="data-link" href="/form_builder.html?form_id=${f.id}&project_id=${projectId}">${icon('pencil')} Modifier</a>
+        <button onclick="deleteEnqueteForm('${f.id}')" style="color:#B91C1C; background:none; border:none; cursor:pointer; font-family:inherit; font-size:0.85rem; padding:0;">${icon('trash-2')} Supprimer</button>
+        ` : ''}
+      </div>
+    `;
+    container.appendChild(div);
+  }
+}
+
+function importForm() { document.getElementById('import-file').click(); }
+
+async function deleteEnqueteForm(formId) {
+  if (!confirm("Supprimer ce formulaire ? S'il a déjà des réponses enregistrées, il sera archivé plutôt que supprimé pour ne rien perdre.")) return;
+  const res = await fetch(`/api/forms/${formId}`, { method: 'DELETE', credentials: 'same-origin' });
+  if (res.ok) {
+    const data = await res.json();
+    if (data.status === 'archived') alert(data.message);
+    loadFormsList();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(extractApiError(data, "Impossible de supprimer ce formulaire."));
+  }
+}
+async function handleImport(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const defaultName = file.name.replace(/\.[^/.]+$/, '');
+  const name = prompt('Nom du formulaire importé :', defaultName);
+  if (!name) { input.value = ''; return; }
+  const formData = new FormData();
+  formData.append('project_id', projectId);
+  formData.append('name', name);
+  formData.append('file', file);
+  const res = await fetch('/api/forms/import', {
+    method: 'POST', credentials: 'same-origin', body: formData
+  });
+  if (res.ok) { alert('Formulaire importé !'); loadFormsList(); }
+  else {
+    const err = await res.json().catch(() => ({}));
+    const detail = Array.isArray(err.detail) ? err.detail.map(d => d.msg || JSON.stringify(d)).join(' ; ') : (err.detail || 'Import échoué');
+    alert('Erreur : ' + detail);
+  }
+  input.value = '';
+}
+
+/* ═════════════════ DONNÉES ═════════════════ */
+async function loadDataFormSelect() {
+  const sel = document.getElementById('data-form-select');
+  sel.innerHTML = '<option value="">Choisir un formulaire…</option>';
+  const res = await fetch(`/api/forms?project_id=${projectId}`, { credentials: 'same-origin' });
+  const forms = res.ok ? await res.json() : [];
+  currentForms = forms;
+  for (const f of forms) {
+    const opt = document.createElement('option');
+    opt.value = f.id; opt.textContent = f.name;
+    sel.appendChild(opt);
+  }
+  sel.onchange = onDataFormSelected;
+}
+
+async function onDataFormSelected() {
+  currentFormId = document.getElementById('data-form-select').value;
+  dataPage = 1;
+  currentFormFields = [];
+  if (currentFormId) {
+    const res = await fetch(`/api/forms/${currentFormId}`, { credentials: 'same-origin' });
+    if (res.ok) {
+      const form = await res.json();
+      for (const section of (form.definition.sections || [])) {
+        for (const field of (section.fields || [])) {
+          if (field.type !== 'note') currentFormFields.push(field);
+        }
+      }
+    }
+  }
+  populateDetectorFieldSelect();
+  loadDataTable();
+  loadTrend();
+  document.getElementById('detector-results').innerHTML = '';
+}
+
+function populateDetectorFieldSelect() {
+  const sel = document.getElementById('detector-field');
+  sel.innerHTML = '<option value="">Champ à surveiller…</option>';
+  for (const f of currentFormFields) {
+    const opt = document.createElement('option');
+    opt.value = f.id; opt.textContent = f.label || f.id;
+    sel.appendChild(opt);
+  }
+  sel.onchange = renderDetectorValueInput;
+  renderDetectorValueInput();
+}
+
+function renderDetectorValueInput() {
+  const container = document.getElementById('detector-value-container');
+  const fieldId = document.getElementById('detector-field').value;
+  const field = currentFormFields.find(f => f.id === fieldId);
+
+  if (field && (field.type === 'select_one' || field.type === 'select_multiple') && (field.options || []).length) {
+    // Champ à choix : on connaît déjà toutes les valeurs possibles -> cases à cocher,
+    // pour pouvoir en cocher plusieurs (ex: "positif" ET "suspect_cancer") sans en oublier.
+    container.innerHTML = field.options.map(o => `
+      <label style="display:inline-flex; align-items:center; gap:4px; margin:0 14px 6px 0; font-size:0.88rem;">
+        <input type="checkbox" class="detector-value-cb" value="${o.value}"> ${o.label || o.value}
+      </label>
+    `).join('');
+  } else if (field) {
+    container.innerHTML = `<input type="text" id="detector-value-text" class="form-input" style="width:220px;" placeholder="Valeur déclenchante (ex: positif)">`;
+  } else {
+    container.innerHTML = '';
+  }
+}
+
+function getDetectorTargetValues() {
+  const checkboxes = document.querySelectorAll('.detector-value-cb:checked');
+  if (checkboxes.length) return Array.from(checkboxes).map(cb => cb.value);
+  const textInput = document.getElementById('detector-value-text');
+  if (textInput && textInput.value.trim()) return [textInput.value.trim()];
+  return [];
+}
+
+function setPeriodPreset(preset) {
+  if (preset === 'all') {
+    periodStart = null;
+    periodEnd = null;
+  } else {
+    const years = preset === '2y' ? 2 : 3;
+    const now = new Date();
+    const start = new Date(now);
+    start.setFullYear(start.getFullYear() - years);
+    periodStart = start.toISOString().slice(0, 10);
+    periodEnd = now.toISOString().slice(0, 10);
+  }
+  document.getElementById('period-start').value = periodStart || '';
+  document.getElementById('period-end').value = periodEnd || '';
+  dataPage = 1;
+  loadDataTable();
+  loadTrend();
+}
+
+function applyCustomPeriod() {
+  periodStart = document.getElementById('period-start').value || null;
+  periodEnd = document.getElementById('period-end').value || null;
+  dataPage = 1;
+  loadDataTable();
+  loadTrend();
+}
+
+async function deleteSubmissionRow(submissionId) {
+  if (!confirm("Supprimer définitivement cette soumission ? Cette action est irréversible.")) return;
+  const res = await fetch(`/api/submissions/${submissionId}`, { method: 'DELETE', credentials: 'same-origin' });
+  if (res.ok) {
+    loadDataTable();
+    loadTrend();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(extractApiError(data, "Impossible de supprimer cette soumission."));
+  }
+}
+
+function referralBadge(status) {
+  if (status === 'admitted') return '<span class="badge" style="background:var(--success-soft); color:var(--success-dark);">Admis</span>';
+  if (status === 'pending') return '<span class="badge" style="background:var(--sev-medium-bg); color:var(--sev-medium-fg);">Admis, dossier à créer</span>';
+  if (status === 'not_admitted') return '<span class="badge" style="background:var(--sev-critical-bg); color:var(--sev-critical-fg);">Non admis</span>';
+  return '—';
+}
+
+function dataColumnValue(row, key) {
+  if (key === '__id') return row.id.slice(0, 8);
+  if (key === '__date') return new Date(row.collected_at).toLocaleDateString('fr-FR');
+  if (key === '__referral') {
+    if (row.referral_status === 'admitted') return 'Admis';
+    if (row.referral_status === 'pending') return 'Admis, dossier à créer';
+    if (row.referral_status === 'not_admitted') return 'Non admis';
+    return '—';
+  }
+  const v = row.responses ? row.responses[key] : undefined;
+  return (v === undefined || v === null || v === '') ? '(vide)' : String(v).slice(0, 60);
+}
+
+function applyDataColumnFilters(rows) {
+  return rows.filter(row => {
+    for (const key in dataColumnFilters) {
+      if (!dataColumnFilters[key].has(dataColumnValue(row, key))) return false;
+    }
+    return true;
+  });
+}
+
+function anyColumnFilterActive() {
+  return Object.keys(dataColumnFilters).length > 0;
+}
+
+function toggleColumnFilterPopup(key) {
+  const existing = document.getElementById('col-filter-popup');
+  const wasForSameKey = existing && existing.dataset.key === key;
+  if (existing) existing.remove();
+  if (wasForSameKey) return;
+
+  const uniqueValues = [...new Set(dataAllRowsCache.map(r => dataColumnValue(r, key)))].sort();
+  const activeSet = dataColumnFilters[key];
+  const popup = document.createElement('div');
+  popup.className = 'col-filter-popup';
+  popup.id = 'col-filter-popup';
+  popup.dataset.key = key;
+  popup.innerHTML = `
+    <div class="select-all-row"><label><input type="checkbox" id="filter-select-all" ${!activeSet ? 'checked' : ''}> (Tout sélectionner)</label></div>
+    <div class="filter-values">
+      ${uniqueValues.map(v => `<label><input type="checkbox" class="filter-value-cb" value="${escapeHtmlSurvey(v)}" ${(!activeSet || activeSet.has(v)) ? 'checked' : ''}> ${escapeHtmlSurvey(v)}</label>`).join('')}
+    </div>
+    <div class="filter-actions">
+      <button class="btn btn-primary btn-sm" onclick="applyColumnFilterFromPopup('${key}')">Appliquer</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearColumnFilter('${key}')">Réinitialiser</button>
+    </div>
+  `;
+  const th = document.querySelector(`th[data-col-key="${key}"]`);
+  th.appendChild(popup);
+
+  document.getElementById('filter-select-all').addEventListener('change', (e) => {
+    popup.querySelectorAll('.filter-value-cb').forEach(cb => cb.checked = e.target.checked);
+  });
+
+  setTimeout(() => document.addEventListener('click', closeFilterPopupOnClickOutside), 0);
+}
+
+function closeFilterPopupOnClickOutside(e) {
+  const popup = document.getElementById('col-filter-popup');
+  if (popup && !popup.contains(e.target) && !e.target.classList.contains('col-filter-btn')) {
+    popup.remove();
+    document.removeEventListener('click', closeFilterPopupOnClickOutside);
+  }
+}
+
+function applyColumnFilterFromPopup(key) {
+  const checked = Array.from(document.querySelectorAll('.filter-value-cb:checked')).map(cb => cb.value);
+  const allValues = [...new Set(dataAllRowsCache.map(r => dataColumnValue(r, key)))];
+  if (checked.length === allValues.length) delete dataColumnFilters[key];
+  else dataColumnFilters[key] = new Set(checked);
+  document.getElementById('col-filter-popup')?.remove();
+  dataPage = 1;
+  loadDataTable();
+}
+
+function clearColumnFilter(key) {
+  delete dataColumnFilters[key];
+  document.getElementById('col-filter-popup')?.remove();
+  dataPage = 1;
+  loadDataTable();
+}
+
+function resetAllColumnFilters() {
+  dataColumnFilters = {};
+  dataPage = 1;
+  loadDataTable();
+}
+
+function toggleRowSelection(id, checked) {
+  if (checked) dataSelectedIds.add(id); else dataSelectedIds.delete(id);
+  updateBulkActionsBar();
+}
+
+function toggleSelectAllRows(checked) {
+  document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.checked = checked;
+    if (checked) dataSelectedIds.add(cb.value); else dataSelectedIds.delete(cb.value);
+  });
+  updateBulkActionsBar();
+}
+
+function updateBulkActionsBar() {
+  const bar = document.getElementById('bulk-actions-bar');
+  const resetBtn = document.getElementById('reset-filters-btn');
+  resetBtn.style.display = anyColumnFilterActive() ? 'inline-block' : 'none';
+  if (dataSelectedIds.size > 0) {
+    bar.style.display = 'flex';
+    bar.querySelector('.bulk-count').textContent = `${dataSelectedIds.size} sélectionnée(s)`;
+  } else {
+    bar.style.display = anyColumnFilterActive() ? 'flex' : 'none';
+    bar.querySelector('.bulk-count').textContent = '';
+  }
+}
+
+async function deleteSelectedSubmissions() {
+  if (dataSelectedIds.size === 0) return;
+  if (!confirm(`Supprimer définitivement ces ${dataSelectedIds.size} soumission(s) ? Cette action est irréversible.`)) return;
+  const ids = Array.from(dataSelectedIds);
+  let failCount = 0;
+  for (const id of ids) {
+    const res = await fetch(`/api/submissions/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+    if (!res.ok) failCount++;
+  }
+  dataSelectedIds.clear();
+  if (failCount > 0) alert(`${failCount} suppression(s) ont échoué.`);
+  loadDataTable();
+  loadTrend();
+}
+
+async function loadDataTable() {
+  const wrap = document.getElementById('data-table-wrap');
+  const pag = document.getElementById('data-pagination');
+  if (!currentFormId) { wrap.innerHTML = '<p style="color:var(--ink-muted)">Sélectionnez un formulaire pour voir ses soumissions.</p>'; pag.innerHTML = ''; return; }
+
+  const qs = new URLSearchParams();
+  if (periodStart) qs.set('start', periodStart);
+  if (periodEnd) qs.set('end', periodEnd);
+  const res = await fetch(`/api/forms/${currentFormId}/submissions?${qs.toString()}`, { credentials: 'same-origin' });
+  if (!res.ok) { wrap.innerHTML = '<p>Erreur de chargement.</p>'; return; }
+  const payload = await res.json();
+  const all = payload.submissions || [];
+  dataAllRowsCache = all;
+
+  // Type de chaque champ (pour savoir lesquels sont des photos/audios/vidéos/
+  // fichiers à afficher comme tels, pas comme du texte brut) — déjà présent
+  // dans la définition renvoyée par cet appel, pas besoin d'un second aller-retour.
+  const fieldTypeById = {};
+  for (const section of (payload.form && payload.form.definition && payload.form.definition.sections) || []) {
+    for (const f of (section.fields || [])) fieldTypeById[f.id] = f.type;
+  }
+  const MEDIA_TYPES_SURVEY = ['image', 'audio', 'video', 'file'];
+  function renderDataCell(value, key) {
+    if (value === null || value === undefined || value === '') return '—';
+    const colType = fieldTypeById[key];
+    if (colType === 'signature') {
+      return `<img src="/api/media/${value}" alt="Signature" style="max-height:50px;background:#fff;border:1px solid var(--border);border-radius:6px;vertical-align:middle;">`;
+    }
+    if (MEDIA_TYPES_SURVEY.includes(colType)) {
+      const url = `/api/media/${value}`;
+      if (colType === 'image') return `<a href="${url}" target="_blank"><img src="${url}" alt="Photo" style="max-width:50px;max-height:50px;border-radius:6px;vertical-align:middle;"></a>`;
+      if (colType === 'audio') return `<audio controls src="${url}" style="max-width:200px;height:30px;"></audio>`;
+      if (colType === 'video') return `<a href="${url}" target="_blank">${icon('video')} Voir la vidéo</a>`;
+      return `<a href="${url}" target="_blank">${icon('paperclip')} Voir le fichier</a>`;
+    }
+    return escapeHtmlSurvey(String(value).slice(0, 40));
+  }
+
+  const filtered = applyDataColumnFilters(all);
+  dataTotal = filtered.length;
+  const start = (dataPage - 1) * dataPageSize;
+  const pageData = filtered.slice(start, start + dataPageSize);
+  const totalPages = Math.ceil(dataTotal / dataPageSize) || 1;
+
+  const hasReferralField = !!payload.has_referral_field;
+
+  updateBulkActionsBar();
+
+  if (all.length === 0) { wrap.innerHTML = '<p style="color:var(--ink-muted)">Aucune soumission pour ce formulaire sur cette période.</p>'; pag.innerHTML = ''; return; }
+  if (pageData.length === 0) { wrap.innerHTML = '<p style="color:var(--ink-muted)">Aucune ligne ne correspond aux filtres de colonnes actifs.</p>'; pag.innerHTML = ''; return; }
+
+  let keys = [];
+  for (const row of all) {
+    if (row.responses && typeof row.responses === 'object' && Object.keys(row.responses).length > 0) {
+      keys = Object.keys(row.responses);
+      break;
+    }
+  }
+  const displayKeys = keys.slice(0, 6);
+  const allColumnKeys = ['__id', '__date', ...displayKeys];
+
+  function filterBtn(key) {
+    const active = !!dataColumnFilters[key];
+    return `<button type="button" class="col-filter-btn ${active ? 'active' : ''}" onclick="event.stopPropagation(); toggleColumnFilterPopup('${key}')">▼</button>`;
+  }
+
+  let html = '<table class="data-table"><thead><tr>';
+  html += `<th style="width:28px;"><input type="checkbox" class="select-all-checkbox" onchange="toggleSelectAllRows(this.checked)"></th>`;
+  html += `<th data-col-key="__id"><div class="th-content"><span>ID</span>${filterBtn('__id')}</div></th>`;
+  html += `<th data-col-key="__date"><div class="th-content"><span>Date</span>${filterBtn('__date')}</div></th>`;
+  for (const k of displayKeys) html += `<th data-col-key="${k}"><div class="th-content"><span>${escapeHtmlSurvey(k)}</span>${filterBtn(k)}</div></th>`;
+  if (hasReferralField) html += `<th data-col-key="__referral"><div class="th-content"><span>Admission Suivi</span>${filterBtn('__referral')}</div></th>`;
+  html += '<th>Actions</th></tr></thead><tbody>';
+
+  for (const row of pageData) {
+    const checked = dataSelectedIds.has(row.id) ? 'checked' : '';
+    html += `<tr><td><input type="checkbox" class="row-checkbox" value="${row.id}" ${checked} onchange="toggleRowSelection('${row.id}', this.checked)"></td>`;
+    html += `<td>${row.id.slice(0,8)}</td><td>${new Date(row.collected_at).toLocaleDateString('fr-FR')}</td>`;
+    for (const k of displayKeys) {
+      const v = (row.responses && row.responses[k] !== undefined && row.responses[k] !== null) ? row.responses[k] : '';
+      html += `<td>${renderDataCell(v, k)}</td>`;
+    }
+    if (hasReferralField) html += `<td>${referralBadge(row.referral_status)}</td>`;
+    html += `<td class="actions">
+      <a href="/history.html?patient_id=${row.patient_id || ''}&form_id=${currentFormId}">${icon('eye')} Voir</a>
+      <a href="/submission.html?submission_id=${row.id}">${icon('pencil')} Éditer</a>
+      <button onclick="deleteSubmissionRow('${row.id}')" style="color:#B91C1C; background:none; border:none; cursor:pointer; font-family:inherit; font-size:0.8rem; padding:0;">${icon('trash-2')} Supprimer</button>
+    </td></tr>`;
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  pag.innerHTML = `
+    <button ${dataPage <= 1 ? 'disabled' : ''} onclick="dataPage--;loadDataTable();">◀ Précédent</button>
+    <span>Page ${dataPage} / ${totalPages} (${dataTotal} ligne(s)${anyColumnFilterActive() ? ' filtrée(s)' : ''})</span>
+    <button ${dataPage >= totalPages ? 'disabled' : ''} onclick="dataPage++;loadDataTable();">Suivant ▶</button>
+  `;
+}
+
+async function exportCurrentData() {
+  if (!currentFormId) return alert('Sélectionnez un formulaire.');
+  const qs = new URLSearchParams({ format: 'csv' });
+  if (periodStart) qs.set('start', periodStart);
+  if (periodEnd) qs.set('end', periodEnd);
+  window.open(`/api/forms/${currentFormId}/export?${qs.toString()}`, '_blank');
+}
+async function exportCurrentDataXlsx() {
+  if (!currentFormId) return alert('Sélectionnez un formulaire.');
+  const qs = new URLSearchParams({ format: 'xlsx' });
+  if (periodStart) qs.set('start', periodStart);
+  if (periodEnd) qs.set('end', periodEnd);
+  window.open(`/api/forms/${currentFormId}/export?${qs.toString()}`, '_blank');
+}
+
+function exportPatientsData(format) {
+  if (!currentFormId) return alert('Sélectionnez un formulaire.');
+  const qs = new URLSearchParams({ format });
+  if (periodStart) qs.set('start', periodStart);
+  if (periodEnd) qs.set('end', periodEnd);
+  // Réutilise le champ/valeurs du détecteur ci-dessous pour les colonnes
+  // "dernier résultat connu" / "a été positif au moins une fois", si renseignés.
+  const field = document.getElementById('detector-field').value;
+  const values = getDetectorTargetValues();
+  if (field && values.length) {
+    qs.set('status_field', field);
+    for (const v of values) qs.append('status_target_values', v);
+  }
+  window.open(`/api/forms/${currentFormId}/export-patients?${qs.toString()}`, '_blank');
+}
+
+async function loadTrend() {
+  const summaryEl = document.getElementById('trend-summary');
+  const tableEl = document.getElementById('trend-table-wrap');
+  if (!currentFormId) {
+    summaryEl.textContent = 'Choisis un formulaire et une période ci-dessus.';
+    tableEl.innerHTML = '';
+    return;
+  }
+  const qs = new URLSearchParams();
+  if (periodStart) qs.set('start', periodStart);
+  if (periodEnd) qs.set('end', periodEnd);
+  const res = await fetch(`/api/forms/${currentFormId}/trend?${qs.toString()}`, { credentials: 'same-origin' });
+  if (!res.ok) { summaryEl.textContent = 'Erreur de chargement.'; tableEl.innerHTML = ''; return; }
+  const data = await res.json();
+  summaryEl.innerHTML = `<strong>${data.total_submissions}</strong> dépistage(s) — <strong>${data.distinct_patients}</strong> personne(s) différente(s) sur la période choisie.`;
+  if (!data.by_month.length) { tableEl.innerHTML = ''; return; }
+  let html = '<table class="data-table"><thead><tr><th>Mois</th><th>Dépistages</th><th>Personnes différentes</th></tr></thead><tbody>';
+  for (const row of data.by_month) {
+    html += `<tr><td>${row.period}</td><td>${row.submissions}</td><td>${row.distinct_patients}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  tableEl.innerHTML = html;
+}
+
+async function runStatusChangeDetector() {
+  const resultsEl = document.getElementById('detector-results');
+  const downloadWrap = document.getElementById('detector-download-wrap');
+  downloadWrap.classList.add('hidden');
+  if (!currentFormId) { resultsEl.innerHTML = '<p style="color:var(--ink-muted)">Choisis un formulaire ci-dessus.</p>'; return; }
+  const field = document.getElementById('detector-field').value;
+  const values = getDetectorTargetValues();
+  if (!field || !values.length) { resultsEl.innerHTML = '<p style="color:var(--ink-muted)">Choisis un champ et au moins une valeur déclenchante.</p>'; return; }
+
+  resultsEl.innerHTML = '<p style="color:var(--ink-muted)">Recherche en cours…</p>';
+  const qs = new URLSearchParams({ field });
+  for (const v of values) qs.append('target_values', v);
+  const res = await fetch(`/api/forms/${currentFormId}/status-change?${qs.toString()}`, { credentials: 'same-origin' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    resultsEl.innerHTML = `<p style="color:#B91C1C">${extractApiError(data, 'Erreur lors de la recherche.')}</p>`;
+    return;
+  }
+  const data = await res.json();
+  if (!data.matches.length) { resultsEl.innerHTML = '<p style="color:var(--ink-muted)">Aucune personne concernée sur les données actuelles.</p>'; return; }
+  const valuesLabel = values.map(escapeHtmlSurvey).join(' / ');
+  let html = '<table class="data-table"><thead><tr><th>Patient</th><th>Avant</th><th>Devenu(e) "' + valuesLabel + '" le</th></tr></thead><tbody>';
+  for (const m of data.matches) {
+    html += `<tr><td><a href="/history.html?patient_id=${m.patient_id}">${escapeHtmlSurvey(m.patient_name)}</a></td><td>${new Date(m.first_other_value_at).toLocaleDateString('fr-FR')}</td><td>${new Date(m.target_value_at).toLocaleDateString('fr-FR')}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  resultsEl.innerHTML = html;
+
+  const dlQs = new URLSearchParams({ field });
+  for (const v of values) dlQs.append('target_values', v);
+  dlQs.set('format', 'csv');
+  document.getElementById('detector-download-csv').href = `/api/forms/${currentFormId}/status-change?${dlQs.toString()}`;
+  dlQs.set('format', 'xlsx');
+  document.getElementById('detector-download-xlsx').href = `/api/forms/${currentFormId}/status-change?${dlQs.toString()}`;
+  downloadWrap.classList.remove('hidden');
+}
+
+function escapeHtmlSurvey(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ═════════════════ PARAMÈTRES ═════════════════ */
+async function saveSettings() {
+  const name = document.getElementById('set-name').value.trim();
+  const desc = document.getElementById('set-desc').value.trim();
+  if (!name) return alert('Le nom est requis.');
+  const res = await fetch(`/api/projects/${projectId}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify({ name, description: desc })
+  });
+  if (res.ok) { 
+    alert('Projet mis à jour.'); 
+    currentProject = { ...currentProject, name, description: desc }; 
+    document.getElementById('project-name').textContent = name; 
+  }
+  else alert('Erreur lors de la mise à jour.');
+}
+
+async function archiveProject() {
+  if (!confirm('Archiver ce projet ? Les nouvelles soumissions seront bloquées.')) return;
+  alert('Fonctionnalité à implémenter côté backend.');
+}
+
+async function deleteProject() {
+  if (!confirm('SUPPRESSION DÉFINITIVE\n\nToutes les données seront supprimées.\n\nConfirmer ?')) return;
+  const res = await fetch(`/api/projects/${projectId}`, { method: 'DELETE', credentials: 'same-origin' });
+  if (res.ok) { alert('Projet supprimé.'); window.location.href = '/'; }
+  else alert('Erreur lors de la suppression.');
+}
+</script>
+
+</body>
+</html>

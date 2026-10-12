@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Journal d'activité — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { display: flex; align-items: center; gap: var(--space-2); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-5); margin-bottom: var(--space-4); }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .table-scroll { overflow-x: auto; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+  .badge-login { background: var(--sev-low-bg); color: var(--sev-low-fg); }
+  .badge-login_failed { background: var(--sev-critical-bg); color: var(--sev-critical-fg); }
+  .badge-create { background: var(--success-soft); color: var(--success-dark); }
+  .badge-update { background: var(--sev-medium-bg); color: var(--sev-medium-fg); }
+  .badge-delete { background: var(--sev-critical-bg); color: var(--sev-critical-fg); }
+  .badge-export { background: var(--secondary-soft); color: var(--secondary-dark); }
+  .toolbar { display: flex; gap: var(--space-3); margin-bottom: var(--space-4); flex-wrap: wrap; align-items: center; }
+  .error-msg { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.9rem; }
+  .hidden { display: none; }
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: var(--space-4); }
+  .pagination button { background: var(--surface); border: 1px solid var(--border); padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer; }
+  .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb"><a href="/">Tous les projets</a> / <span>Journal d'activité</span></div>
+    <h1><span class="icon-slot" data-icon="clock"></span> Journal d'activité</h1>
+    <p style="color:var(--ink-muted); margin-bottom:var(--space-4);">
+      Se limite volontairement aux actions sensibles — connexions, gestion des comptes, suppressions, exports.
+      Ne trace pas chaque consultation de page ni chaque soumission de formulaire.
+    </p>
+
+    <div id="access-denied" class="error-msg hidden">Cette page est réservée aux administrateurs.</div>
+
+    <div id="admin-content" class="hidden">
+      <div class="toolbar">
+        <select id="filter-action" class="form-input" style="width:220px;">
+          <option value="">Toutes les actions</option>
+          <option value="login">Connexion réussie</option>
+          <option value="login_failed">Connexion échouée</option>
+          <option value="create">Création</option>
+          <option value="update">Modification</option>
+          <option value="delete">Suppression</option>
+          <option value="export">Export</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Date</th><th>Compte</th><th>Action</th><th>Concerne</th><th>Détail</th><th>Adresse IP</th></tr></thead>
+            <tbody id="log-rows"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+let currentPage = 1;
+const pageSize = 50;
+
+const ACTION_LABELS = {
+  login: 'Connexion', login_failed: 'Connexion échouée', create: 'Création',
+  update: 'Modification', delete: 'Suppression', export: 'Export',
+};
+const ENTITY_LABELS = {
+  user: 'Compte', project: 'Projet', patient: 'Patient', submission: 'Soumission',
+  case: 'Dossier de suivi', form: 'Formulaire', case_list: 'Liste des cas', project_summary: 'Résumé projet',
+};
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function formatDateTime(iso) {
+  return new Date(iso).toLocaleString('fr-FR');
+}
+
+async function loadLogs() {
+  const action = document.getElementById('filter-action').value;
+  const qs = new URLSearchParams({ page: currentPage, page_size: pageSize });
+  if (action) qs.set('action', action);
+  const res = await fetch(`/api/audit-logs?${qs.toString()}`, { credentials: 'same-origin' });
+  if (!res.ok) return;
+  const data = await res.json();
+
+  const tbody = document.getElementById('log-rows');
+  if (data.entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--ink-muted); padding:16px;">Aucune entrée pour l\'instant.</td></tr>';
+  } else {
+    tbody.innerHTML = data.entries.map(e => `
+      <tr>
+        <td>${formatDateTime(e.created_at)}</td>
+        <td>${escapeHtml(e.user_email || '—')}</td>
+        <td><span class="badge badge-${e.action}">${ACTION_LABELS[e.action] || e.action}</span></td>
+        <td>${ENTITY_LABELS[e.entity_type] || e.entity_type || '—'}</td>
+        <td>${escapeHtml(e.details || '—')}</td>
+        <td style="color:var(--ink-faint); font-size:0.8rem;">${escapeHtml(e.ip_address || '—')}</td>
+      </tr>
+    `).join('');
+  }
+
+  const totalPages = Math.ceil(data.total / pageSize) || 1;
+  document.getElementById('pagination').innerHTML = `
+    <button ${currentPage <= 1 ? 'disabled' : ''} onclick="currentPage--;loadLogs();">◀ Précédent</button>
+    <span>Page ${currentPage} / ${totalPages} (${data.total} entrée(s))</span>
+    <button ${currentPage >= totalPages ? 'disabled' : ''} onclick="currentPage++;loadLogs();">Suivant ▶</button>
+  `;
+}
+
+document.getElementById('filter-action').addEventListener('change', () => { currentPage = 1; loadLogs(); });
+
+(async () => {
+  const user = await initAppShell(null);
+  if (!user) return;
+  if (user.role !== 'admin') {
+    document.getElementById('access-denied').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('admin-content').classList.remove('hidden');
+  await loadLogs();
+})();
+</script>
+</body>
+</html>

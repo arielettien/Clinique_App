@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connexion — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-box { background: var(--surface); padding: 36px; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); width: 340px; border: 1px solid var(--border); }
+  .login-box h1 { font-size: 1.3rem; margin: 0 0 4px 0; text-align: center; }
+  .login-box .subtitle { text-align: center; color: var(--ink-faint); font-size: 0.85rem; margin-bottom: 22px; }
+  .login-box input { width: 100%; margin-bottom: 12px; box-sizing: border-box; }
+  .login-box button { width: 100%; }
+  #error-message { color: var(--sev-critical-fg); font-size: 0.85rem; margin-bottom: 12px; display: none; }
+</style>
+</head>
+<body>
+
+<div class="login-box">
+  <h1>🩺 Clinique</h1>
+  <p class="subtitle">Connexion à ton espace</p>
+  <p id="error-message"></p>
+  <form id="login-form">
+    <input name="email" type="email" placeholder="Email" required autofocus>
+    <input name="password" type="password" placeholder="Mot de passe" required>
+    <button type="submit" class="btn btn-primary">Se connecter</button>
+  </form>
+</div>
+
+<script>
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const payload = Object.fromEntries(form.entries());
+  const errorMsg = document.getElementById('error-message');
+  errorMsg.style.display = 'none';
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(payload)
+  });
+
+  if (res.ok) {
+    window.location.href = '/';
+  } else {
+    const data = await res.json().catch(() => ({}));
+    errorMsg.textContent = data.detail || "Email ou mot de passe incorrect.";
+    errorMsg.style.display = 'block';
+  }
+});
+</script>
+
+</body>
+</html>

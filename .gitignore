@@ -1,0 +1,22 @@
+# Secrets et configuration locale — ne doit jamais être partagé/commité.
+.env
+
+# Certificat HTTPS auto-signé (généré par backend/generate_cert.py) — propre
+# à chaque déploiement (IP locale différente d'un site à l'autre).
+django_backend/certs/
+
+# Sauvegardes de la base de données (contiennent des données patients).
+backups/
+
+# Fichiers envoyés par les utilisateurs (photos, signatures, documents).
+django_backend/uploads/
+
+# Python
+__pycache__/
+*.pyc
+
+# Exports et sauvegardes de la base (contiennent des donnees patients en clair).
+*.sql
+*.sql.gz
+*.sql.gz.gpg
+migration_clinique_*.sql

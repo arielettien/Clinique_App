@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utilisateurs — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { font-size: 1.35rem; margin: 4px 0 16px 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; margin-bottom: 18px; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .data-table th { background: var(--surface-muted); text-align: left; padding: 10px 12px; font-weight: 600; color: var(--ink-muted); border-bottom: 2px solid var(--border); }
+  .table-scroll { overflow-x: auto; }
+  .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; }
+  .badge-admin { background: var(--primary-soft, #E0E7FF); color: var(--primary-dark, #3730A3); }
+  .badge-operator { background: var(--surface-muted); color: var(--ink-muted); }
+  .badge-inactive { background: #FEF2F2; color: #B91C1C; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; color: var(--ink-muted); }
+  .field input, .field select { width: 100%; max-width: 320px; box-sizing: border-box; }
+  .error-msg { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.9rem; }
+  .success-msg { background: #F0FDF4; border: 1px solid #86EFAC; color: #15803D; padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.9rem; }
+  .hidden { display: none; }
+  .row-actions select { font-size: 0.82rem; padding: 4px 6px; }
+  .row-actions button { font-size: 0.8rem; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb"><a href="/">Tous les projets</a> / <span>Gestion des utilisateurs</span></div>
+    <h1>👤 Gestion des utilisateurs</h1>
+
+    <div id="access-denied" class="error-msg hidden">Cette page est réservée aux administrateurs.</div>
+
+    <div id="admin-content" class="hidden">
+      <div class="card">
+        <h3 style="margin-top:0;">Nouvel utilisateur</h3>
+        <p id="create-error" class="error-msg hidden"></p>
+        <p id="create-success" class="success-msg hidden"></p>
+        <div class="field">
+          <label>Nom complet</label>
+          <input type="text" id="new-full-name">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="new-email">
+        </div>
+        <div class="field">
+          <label>Mot de passe provisoire</label>
+          <input type="text" id="new-password">
+        </div>
+        <div class="field">
+          <label>Rôle</label>
+          <select id="new-role">
+            <option value="operator">Opérateur (usage courant)</option>
+            <option value="admin">Administrateur (accès complet)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="btn-create-user">Créer le compte</button>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Comptes existants</h3>
+        <div id="users-table-wrap" class="table-scroll"><p style="color:var(--ink-muted);">Chargement…</p></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+let currentUserEmail = null;
+
+function formatDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('fr-FR');
+}
+function roleBadge(role) {
+  return role === 'admin' ? '<span class="badge badge-admin">Admin</span>' : '<span class="badge badge-operator">Opérateur</span>';
+}
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+(async () => {
+  const user = await initAppShell(null);
+  if (!user) return;
+  currentUserEmail = user.email;
+
+  if (user.role !== 'admin') {
+    document.getElementById('access-denied').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('admin-content').classList.remove('hidden');
+  await loadUsers();
+})();
+
+async function loadUsers() {
+  const wrap = document.getElementById('users-table-wrap');
+  const res = await fetch('/api/users', { credentials: 'same-origin' });
+  if (res.status === 403) {
+    document.getElementById('admin-content').classList.add('hidden');
+    document.getElementById('access-denied').classList.remove('hidden');
+    return;
+  }
+  if (!res.ok) { wrap.innerHTML = '<p>Erreur de chargement.</p>'; return; }
+  const users = await res.json();
+
+  let html = '<table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Statut</th><th>Créé le</th><th>Actions</th></tr></thead><tbody>';
+  for (const u of users) {
+    const isSelf = u.email === currentUserEmail;
+    html += `<tr>
+      <td>${escapeHtml(u.full_name)}</td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>${roleBadge(u.role)}</td>
+      <td>${u.is_active ? 'Actif' : '<span class="badge badge-inactive">Désactivé</span>'}</td>
+      <td>${formatDate(u.created_at)}</td>
+      <td class="row-actions">
+        <select onchange="changeRole('${u.id}', this.value)" ${isSelf ? 'disabled title="Tu ne peux pas changer ton propre rôle"' : ''}>
+          <option value="operator" ${u.role === 'operator' ? 'selected' : ''}>Opérateur</option>
+          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+        <button onclick="toggleActive('${u.id}', ${u.is_active})" ${isSelf ? 'disabled title="Tu ne peux pas désactiver ton propre compte"' : ''}>${u.is_active ? 'Désactiver' : 'Réactiver'}</button>
+        <button onclick="resetPassword('${u.id}')">Réinitialiser mdp</button>
+        <button onclick="deleteUserAccount('${u.id}')" style="color:#B91C1C;" ${isSelf ? 'disabled title="Tu ne peux pas supprimer ton propre compte"' : ''}>Supprimer</button>
+      </td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+document.getElementById('btn-create-user').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-create-user');
+  if (btn.disabled) return;
+  const errEl = document.getElementById('create-error');
+  const successEl = document.getElementById('create-success');
+  errEl.classList.add('hidden');
+  successEl.classList.add('hidden');
+
+  const full_name = document.getElementById('new-full-name').value.trim();
+  const email = document.getElementById('new-email').value.trim();
+  const password = document.getElementById('new-password').value;
+  const role = document.getElementById('new-role').value;
+  if (!full_name || !email || !password) {
+    errEl.textContent = "Nom, email et mot de passe sont obligatoires.";
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  const res = await fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ full_name, email, password, role })
+  });
+  btn.disabled = false;
+  if (res.ok) {
+    successEl.textContent = `Compte créé pour ${full_name}.`;
+    successEl.classList.remove('hidden');
+    document.getElementById('new-full-name').value = '';
+    document.getElementById('new-email').value = '';
+    document.getElementById('new-password').value = '';
+    await loadUsers();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    errEl.textContent = extractApiError(data, "Impossible de créer ce compte.");
+    errEl.classList.remove('hidden');
+  }
+});
+
+async function changeRole(userId, newRole) {
+  const res = await fetch(`/api/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ role: newRole })
+  });
+  if (res.ok) {
+    await loadUsers();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(extractApiError(data, "Impossible de changer le rôle."));
+    await loadUsers();
+  }
+}
+
+async function toggleActive(userId, currentlyActive) {
+  const res = await fetch(`/api/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ is_active: !currentlyActive })
+  });
+  if (res.ok) {
+    await loadUsers();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(extractApiError(data, "Impossible de modifier le statut de ce compte."));
+  }
+}
+
+async function resetPassword(userId) {
+  const newPassword = prompt("Nouveau mot de passe provisoire pour ce compte :");
+  if (!newPassword) return;
+  const res = await fetch(`/api/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ password: newPassword })
+  });
+  if (res.ok) {
+    alert("Mot de passe réinitialisé.");
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(extractApiError(data, "Impossible de réinitialiser le mot de passe."));
+  }
+}
+
+async function deleteUserAccount(userId) {
+  if (!confirm("Supprimer définitivement ce compte ? Cette action est irréversible.")) return;
+  const res = await fetch(`/api/users/${userId}`, { method: 'DELETE', credentials: 'same-origin' });
+  if (res.ok) {
+    await loadUsers();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(extractApiError(data, "Impossible de supprimer ce compte."));
+  }
+}
+</script>
+</body>
+</html>

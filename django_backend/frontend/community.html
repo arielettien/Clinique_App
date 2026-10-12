@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Formulaire communautaire — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  /* Page autonome, sans sidebar ni compte — pensée d'abord pour un
+     téléphone (une colonne, gros boutons), qui s'élargit ensuite pour
+     tablette/ordinateur. Aucune dépendance à app_shell.js. */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  input, select, textarea, button { font-size: 16px; } /* évite le zoom automatique sur iOS */
+
+  .community-header {
+    position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .community-header .title-block { min-width: 0; }
+  .community-header .title-block strong { display: block; font-family: var(--font-display); font-size: 0.95rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .community-header .eyebrow { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); font-weight: 700; }
+  #sync-btn { flex-shrink: 0; white-space: nowrap; }
+  .community-header .online-indicator { margin-bottom: 0; }
+
+  .community-wrap { max-width: 640px; margin: 0 auto; padding: 20px 16px 110px 16px; }
+
+  /* --- Écran d'accès (code) --- */
+  .gate-wrap { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 56px); padding: 16px; }
+  .gate-card {
+    width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 16px); padding: 32px 26px; text-align: center;
+    box-shadow: 0 4px 24px rgba(28,43,46,0.08);
+  }
+  .gate-icon {
+    width: 56px; height: 56px; border-radius: 50%; background: var(--primary-soft); color: var(--primary-dark);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto; font-size: 1.6rem;
+  }
+  .gate-card h1 { font-family: var(--font-display); font-size: 1.25rem; margin: 0 0 6px 0; }
+  .gate-card .gate-form-name { font-weight: 600; color: var(--primary-dark); margin: 0 0 14px 0; font-size: 0.95rem; }
+  .gate-card p.gate-hint { color: var(--ink-muted); font-size: 0.88rem; margin: 0 0 20px 0; line-height: 1.5; }
+  .gate-card input {
+    width: 100%; text-align: center; letter-spacing: 0.12em; font-weight: 700; text-transform: uppercase;
+    padding: 14px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+    margin-bottom: 14px;
+  }
+  .gate-card input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .gate-card button { width: 100%; height: 48px; font-size: 0.95rem; font-weight: 600; }
+  .error-msg {
+    background: var(--sev-critical-bg); border: 1px solid var(--sev-critical-border); color: var(--sev-critical-fg);
+    padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; line-height: 1.4;
+  }
+
+  /* --- Formulaire --- */
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 14px; }
+  .section h2 { font-family: var(--font-display); font-size: 1rem; margin: 0 0 12px 0; }
+  .field { margin-bottom: 16px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--ink-muted); }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 12px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface);
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .field-hint { font-size: 0.78rem; color: var(--ink-faint); margin: -2px 0 6px 0; }
+  .checkbox-option { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 0.9rem; }
+  .checkbox-option input { width: auto; }
+  .checkbox-group { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+
+  .media-field { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 12px; }
+  .media-preview img { max-width: 100%; max-height: 220px; border-radius: var(--radius-sm); display: block; margin-bottom: 8px; }
+  .media-preview audio, .media-preview video { width: 100%; margin-bottom: 8px; }
+  .media-file-link { display: inline-block; margin-bottom: 8px; }
+  .media-file-input { width: 100%; font-size: 0.85rem; }
+  .media-status { font-size: 0.78rem; color: var(--ink-muted); margin-top: 6px; }
+  .media-remove-btn { display: block; margin-top: 6px; background: none; border: none; color: var(--sev-critical-fg); font-size: 0.8rem; cursor: pointer; padding: 0; }
+  .signature-canvas {
+    width: 100%; height: 160px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    background: #fff; touch-action: none; cursor: crosshair; display: block;
+  }
+  .signature-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+  .submit-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border);
+    padding: 12px 16px; box-shadow: 0 -2px 12px rgba(0,0,0,0.06); z-index: 20;
+  }
+  .submit-bar button { width: 100%; max-width: 640px; margin: 0 auto; display: block; height: 52px; font-size: 1rem; font-weight: 600; }
+
+  #live-alerts .alert-banner { margin-bottom: 10px; }
+  #global-error, #success-message { margin-bottom: 14px; }
+
+  /* Tablette / ordinateur : plus d'air, colonnes un peu plus larges */
+  @media (min-width: 720px) {
+    .community-wrap { padding: 32px 24px 130px 24px; }
+    .section { padding: 22px 26px; }
+    .gate-card { padding: 40px 36px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="community-header">
+  <div class="title-block">
+    <span class="eyebrow">Lien communautaire</span>
+    <strong id="header-form-name">Formulaire</strong>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span class="online-indicator" id="header-online-indicator">…</span>
+    <button type="button" id="sync-btn" class="btn btn-secondary btn-sm hidden">Synchroniser</button>
+  </div>
+</div>
+
+<div class="community-wrap">
+
+  <div id="gate-screen" class="hidden">
+    <div class="gate-wrap">
+      <div class="gate-card">
+        <div class="gate-icon">🔑</div>
+        <h1>Accès communautaire</h1>
+        <p class="gate-form-name hidden" id="gate-form-name"></p>
+        <p class="gate-hint">Entre le code d'accès fourni par ton responsable de projet pour ouvrir ce formulaire.</p>
+        <input type="text" id="gate-code-input" placeholder="Code d'accès" autocomplete="off" autocapitalize="characters" inputmode="text">
+        <button type="button" id="gate-submit-btn" class="btn btn-primary">Continuer</button>
+        <p id="gate-error" class="error-msg hidden" style="margin-top:14px; text-align:left;"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="form-screen" class="hidden">
+    <p id="global-error" class="alert-banner severity-critical hidden"></p>
+    <p id="success-message" class="alert-banner severity-low hidden"></p>
+    <div id="live-alerts"></div>
+    <form id="clinical-form"></form>
+  </div>
+
+</div>
+
+<script src="/dexie.min.js"></script>
+<script src="/offline_db.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const formId = params.get('form_id');
+let currentForm = null;
+let unlockedCode = null;
+let isOfflineForm = false;
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Construit un message d'erreur lisible depuis une réponse API en échec
+// (copié d'app_shell.js — non chargé ici, cette page n'a pas de compte).
+function extractApiError(data, fallback) {
+  const d = data && data.detail;
+  if (!d) return fallback;
+  if (typeof d === 'string') return d;
+  if (Array.isArray(d)) {
+    return d.map(item => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') {
+        const loc = Array.isArray(item.loc) ? item.loc.filter(p => p !== 'body').join('.') : '';
+        return loc ? `${loc} : ${item.msg || ''}` : (item.msg || JSON.stringify(item));
+      }
+      return String(item);
+    }).join(' | ');
+  }
+  if (typeof d === 'object') return d.msg || JSON.stringify(d);
+  return String(d);
+}
+
+function generateIdempotencyKey() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  return 'idk-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+let currentIdempotencyKey = generateIdempotencyKey();
+
+function localStorageKey(fid) { return `community_code_${fid}`; }
+
+/* ── Écran d'accès (code) ── */
+
+async function tryUnlockWithStoredCode() {
+  const stored = localStorage.getItem(localStorageKey(formId));
+  if (!stored) return false;
+  try {
+    const res = await fetch(`/api/public/forms/${formId}`, {
+      headers: { 'X-Community-Code': stored },
+      signal: AbortSignal.timeout(COMMUNITY_FETCH_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      currentForm = await res.json();
+      unlockedCode = stored;
+      if (window.cacheCommunityForm) await cacheCommunityForm(currentForm);
+      return true;
+    }
+    if (res.status === 403 || res.status === 404) {
+      localStorage.removeItem(localStorageKey(formId));
+    }
+    return false;
+  } catch (netErr) {
+    // Hors ligne, impossible de revérifier le code — si ce lien a déjà été
+    // ouvert en ligne au moins une fois sur cet appareil, on continue avec
+    // la définition mise en cache plutôt que de bloquer l'agent sur le
+    // terrain simplement parce que le réseau manque maintenant.
+    if (window.getCachedCommunityForm) {
+      const cached = await getCachedCommunityForm(formId);
+      if (cached) {
+        currentForm = { id: cached.form_id, name: cached.name, project_id: cached.project_id, definition: cached.definition };
+        unlockedCode = stored;
+        isOfflineForm = true;
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
+document.getElementById('gate-submit-btn').addEventListener('click', submitGateCode);
+document.getElementById('gate-code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGateCode(); });
+
+async function submitGateCode() {
+  const input = document.getElementById('gate-code-input');
+  const code = input.value.trim().toUpperCase();
+  const errEl = document.getElementById('gate-error');
+  errEl.classList.add('hidden');
+  if (!code) return;
+  const btn = document.getElementById('gate-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Vérification…';
+  try {
+    const res = await fetch(`/api/public/forms/${formId}`, {
+      headers: { 'X-Community-Code': code },
+      signal: AbortSignal.timeout(COMMUNITY_FETCH_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      currentForm = await res.json();
+      unlockedCode = code;
+      localStorage.setItem(localStorageKey(formId), code);
+      if (window.cacheCommunityForm) await cacheCommunityForm(currentForm);
+      showFormScreen();
+    } else if (res.status === 403) {
+      errEl.textContent = "Code d'accès incorrect.";
+      errEl.classList.remove('hidden');
+    } else if (res.status === 404) {
+      errEl.textContent = "Ce lien n'est plus actif (formulaire supprimé ou lien désactivé par le responsable).";
+      errEl.classList.remove('hidden');
+    } else {
+      errEl.textContent = 'Erreur inattendue, réessaie.';
+      errEl.classList.remove('hidden');
+    }
+  } catch (netErr) {
+    errEl.textContent = 'Connexion nécessaire pour la toute première utilisation de ce lien sur cet appareil. ' + communityNetworkErrorMessage();
+    errEl.classList.remove('hidden');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Continuer';
+}
+
+function handleCodeRejected() {
+  localStorage.removeItem(localStorageKey(formId));
+  unlockedCode = null;
+  document.getElementById('form-screen').classList.add('hidden');
+  document.getElementById('gate-screen').classList.remove('hidden');
+  const errEl = document.getElementById('gate-error');
+  errEl.textContent = "Ce code d'accès n'est plus valide (probablement régénéré) — demande le nouveau code à ton responsable.";
+  errEl.classList.remove('hidden');
+  reEnableSubmit();
+}
+
+function showFormScreen() {
+  document.getElementById('gate-screen').classList.add('hidden');
+  document.getElementById('form-screen').classList.remove('hidden');
+  document.getElementById('header-form-name').textContent = currentForm.name;
+  renderForm(currentForm);
+}
+
+/* ── Statut en ligne / hors ligne + synchronisation ── */
+
+async function updateCommunityStatus() {
+  const indicator = document.getElementById('header-online-indicator');
+  const syncBtn = document.getElementById('sync-btn');
+  const online = navigator.onLine;
+  indicator.textContent = online ? 'En ligne' : 'Hors ligne';
+  indicator.className = 'online-indicator ' + (online ? 'is-online' : 'is-offline');
+  if (!formId || !window.countCommunityPending) { syncBtn.classList.add('hidden'); return; }
+  try {
+    const pending = await countCommunityPending(formId);
+    if (pending > 0) {
+      syncBtn.classList.remove('hidden');
+      syncBtn.textContent = `🔄 Synchroniser (${pending} en attente)`;
+      indicator.classList.add('has-pending');
+    } else {
+      syncBtn.classList.add('hidden');
+    }
+  } catch (e) { /* pas grave, juste pas de compteur */ }
+}
+
+document.getElementById('sync-btn').addEventListener('click', manualSync);
+
+async function manualSync() {
+  if (!unlockedCode || !window.syncCommunityQueue) return;
+  const btn = document.getElementById('sync-btn');
+  btn.disabled = true;
+  btn.textContent = 'Synchronisation…';
+  const result = await syncCommunityQueue(formId, unlockedCode);
+  btn.disabled = false;
+  await updateCommunityStatus();
+  if (result.failed > 0) {
+    alert(`Synchronisation partielle : ${result.synced} envoyé(s), ${result.failed} échec(s).\n${(result.errors || []).join('\n')}`);
+  } else if (result.synced > 0) {
+    const successEl = document.getElementById('success-message');
+    successEl.textContent = `${result.synced} élément(s) synchronisé(s) avec succès.`;
+    successEl.className = 'alert-banner severity-low';
+    successEl.classList.remove('hidden');
+  }
+}
+
+async function autoSync() {
+  if (!unlockedCode || !window.syncCommunityQueue) return;
+  await syncCommunityQueue(formId, unlockedCode);
+  await updateCommunityStatus();
+}
+
+window.addEventListener('online', () => { updateCommunityStatus(); setTimeout(autoSync, 1500); });
+window.addEventListener('offline', updateCommunityStatus);
+
+/* ── Rendu du formulaire ── */
+
+function fieldValues() {
+  const values = {};
+  document.querySelectorAll('[data-field-id]').forEach(el => {
+    if (el.dataset.type === 'select_multiple') {
+      const checked = el.querySelectorAll('input[type="checkbox"]:checked');
+      values[el.dataset.fieldId] = Array.from(checked).map(cb => cb.value);
+    } else {
+      values[el.dataset.fieldId] = el.value;
+    }
+  });
+  return values;
+}
+
+function resolveOptions(field, choiceLists) {
+  if (field.list_name && choiceLists && choiceLists[field.list_name]) {
+    return choiceLists[field.list_name];
+  }
+  return field.options || [];
+}
+
+const MEDIA_ACCEPT = { image: 'image/*', audio: 'audio/*', video: 'video/*', file: '*/*' };
+const MEDIA_CAPTURE = { image: ' capture="environment"', audio: '', video: ' capture="environment"', file: '' };
+
+function renderMediaFieldHtml(field, requiredAttr, hintHtml) {
+  const accept = MEDIA_ACCEPT[field.type] || '*/*';
+  const capture = MEDIA_CAPTURE[field.type] || '';
+  return `
+    <label>${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>${hintHtml}
+    <div class="media-field">
+      <input type="hidden" data-field-id="${field.id}" data-media-type="${field.type}" ${requiredAttr} value="">
+      <div class="media-preview" id="media-preview-${field.id}"></div>
+      <input type="file" accept="${accept}"${capture} class="media-file-input"
+             onchange="handleCommunityMediaFileSelect('${field.id}', '${field.type}', this)">
+      <div class="media-status" id="media-status-${field.id}"></div>
+    </div>
+  `;
+}
+
+// L'aperçu reste TOUJOURS le fichier local (objet Blob), jamais rechargé
+// depuis /api/media/{id} : cet endpoint exige un compte, que ce mode n'a
+// jamais. L'aperçu local suffit pour la durée de la saisie.
+function mediaPreviewLocal(fieldType, filename, objectUrl) {
+  if (fieldType === 'image') return `<img src="${objectUrl}" alt="${escapeHtml(filename || 'Photo')}">`;
+  if (fieldType === 'audio') return `<audio controls src="${objectUrl}"></audio>`;
+  if (fieldType === 'video') return `<video controls src="${objectUrl}" style="max-width:100%;"></video>`;
+  return `<a href="${objectUrl}" target="_blank" class="media-file-link">${window.icon ? icon('paperclip') : '📎'} ${escapeHtml(filename || 'Fichier')}</a>`;
+}
+
+function clearMediaField(fieldId) {
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+  if (hidden) hidden.value = '';
+  const box = document.getElementById(`media-preview-${fieldId}`);
+  if (box) box.innerHTML = '';
+  const status = document.getElementById(`media-status-${fieldId}`);
+  if (status) status.textContent = '';
+}
+
+async function handleCommunityMediaFileSelect(fieldId, fieldType, inputEl) {
+  const file = inputEl.files[0];
+  if (!file) return;
+  const status = document.getElementById(`media-status-${fieldId}`);
+  const box = document.getElementById(`media-preview-${fieldId}`);
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+
+  const objectUrl = URL.createObjectURL(file);
+  const preview = mediaPreviewLocal(fieldType, file.name, objectUrl) +
+    `<button type="button" class="media-remove-btn" onclick="clearMediaField('${fieldId}')">✕ Retirer</button>`;
+  if (box) box.innerHTML = preview;
+  if (status) status.textContent = 'Envoi en cours…';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('field_type', fieldType);
+
+  try {
+    const res = await fetch(`/api/public/forms/${formId}/media/upload`, {
+      method: 'POST', headers: { 'X-Community-Code': unlockedCode }, body: formData,
+      signal: AbortSignal.timeout(COMMUNITY_FETCH_TIMEOUT_MS),
+    });
+    if (res.status === 403) { handleCodeRejected(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (status) status.textContent = extractApiError(data, "Échec de l'envoi.");
+      return;
+    }
+    if (hidden) hidden.value = data.id;
+    if (status) status.textContent = 'Envoyé ✓';
+    recomputeCalculatedFields();
+    recomputeConditions();
+  } catch (e) {
+    if (!window.storeCommunityMediaOffline) {
+      if (status) status.textContent = communityNetworkErrorMessage();
+      return;
+    }
+    const localId = await storeCommunityMediaOffline(file, fieldType, file.name, file.type);
+    if (hidden) hidden.value = localId;
+    if (status) status.textContent = 'Enregistré localement — sera envoyé au retour du réseau.';
+    updateCommunityStatus();
+    recomputeCalculatedFields();
+    recomputeConditions();
+  }
+}
+
+/* ── Champ Signature : même principe que submission.html, adapté au lien
+   communautaire (code d'accès, repli hors-ligne dédié). ── */
+
+function renderSignatureFieldHtml(field, requiredAttr, hintHtml) {
+  return `
+    <label>${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>${hintHtml}
+    <div class="media-field">
+      <input type="hidden" data-field-id="${field.id}" data-media-type="signature" ${requiredAttr} value="">
+      <canvas class="signature-canvas" id="signature-canvas-${field.id}" data-canvas-id="${field.id}"></canvas>
+      <div class="signature-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="clearSignatureCanvas('${field.id}')">Effacer le tracé</button>
+      </div>
+      <div class="media-status" id="media-status-${field.id}"></div>
+    </div>
+  `;
+}
+
+const signatureCanvasState = {};
+const signatureUploadTimers = {};
+
+function initSignatureCanvas(fieldId) {
+  const canvas = document.getElementById(`signature-canvas-${fieldId}`);
+  if (!canvas || signatureCanvasState[fieldId]) return;
+
+  const ratio = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(rect.width * ratio));
+  canvas.height = Math.max(1, Math.round(rect.height * ratio));
+  const ctx = canvas.getContext('2d');
+  ctx.scale(ratio, ratio);
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1C2B2E';
+
+  const state = { ctx, drawing: false, lastX: 0, lastY: 0, hasDrawn: false };
+  signatureCanvasState[fieldId] = state;
+
+  const pointFromEvent = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - r.left, y: p.clientY - r.top };
+  };
+  const start = (e) => {
+    e.preventDefault();
+    const p = pointFromEvent(e);
+    state.drawing = true; state.lastX = p.x; state.lastY = p.y;
+  };
+  const move = (e) => {
+    if (!state.drawing) return;
+    e.preventDefault();
+    const p = pointFromEvent(e);
+    state.ctx.beginPath();
+    state.ctx.moveTo(state.lastX, state.lastY);
+    state.ctx.lineTo(p.x, p.y);
+    state.ctx.stroke();
+    state.lastX = p.x; state.lastY = p.y;
+    state.hasDrawn = true;
+  };
+  const end = () => {
+    if (!state.drawing) return;
+    state.drawing = false;
+    clearTimeout(signatureUploadTimers[fieldId]);
+    signatureUploadTimers[fieldId] = setTimeout(() => uploadCommunitySignature(fieldId), 600);
+  };
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+}
+
+async function uploadCommunitySignature(fieldId) {
+  const canvas = document.getElementById(`signature-canvas-${fieldId}`);
+  const state = signatureCanvasState[fieldId];
+  if (!canvas || !state || !state.hasDrawn) return;
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+  const status = document.getElementById(`media-status-${fieldId}`);
+  if (status) status.textContent = 'Envoi en cours…';
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+  try {
+    const formData = new FormData();
+    formData.append('file', blob, `signature_${fieldId}.png`);
+    formData.append('field_type', 'signature');
+    const res = await fetch(`/api/public/forms/${formId}/media/upload`, {
+      method: 'POST', headers: { 'X-Community-Code': unlockedCode }, body: formData,
+      signal: AbortSignal.timeout(COMMUNITY_FETCH_TIMEOUT_MS),
+    });
+    if (res.status === 403) { handleCodeRejected(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (status) status.textContent = extractApiError(data, "Échec de l'envoi de la signature.");
+      return;
+    }
+    if (hidden) hidden.value = data.id;
+    if (status) status.textContent = 'Signature enregistrée ✓';
+    recomputeCalculatedFields();
+    recomputeConditions();
+  } catch (e) {
+    if (!window.storeCommunityMediaOffline) {
+      if (status) status.textContent = communityNetworkErrorMessage();
+      return;
+    }
+    const localId = await storeCommunityMediaOffline(blob, 'signature', `signature_${fieldId}.png`, 'image/png');
+    if (hidden) hidden.value = localId;
+    if (status) status.textContent = 'Enregistrée localement — sera envoyée au retour du réseau.';
+    updateCommunityStatus();
+    recomputeCalculatedFields();
+    recomputeConditions();
+  }
+}
+
+function clearSignatureCanvas(fieldId) {
+  const canvas = document.getElementById(`signature-canvas-${fieldId}`);
+  const state = signatureCanvasState[fieldId];
+  if (canvas && state) {
+    state.ctx.clearRect(0, 0, canvas.width, canvas.height);
+    state.hasDrawn = false;
+  }
+  const hidden = document.querySelector(`input[type="hidden"][data-field-id="${fieldId}"]`);
+  if (hidden) hidden.value = '';
+  const status = document.getElementById(`media-status-${fieldId}`);
+  if (status) status.textContent = '';
+}
+
+// Âge en mois tant que l'enfant a moins de 5 ans (usage nutrition : "0 ans"
+// n'est d'aucune utilité pour un bébé de quelques mois, l'âge en mois est ce
+// qui compte réellement en dépistage nutritionnel jusqu'à 5 ans).
+function computeAge(dob) {
+  if (!dob) return '—';
+  const birth = new Date(dob);
+  const now = new Date();
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (now.getDate() < birth.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  if (years < 5) return `${years * 12 + months} mois`;
+  return `${years} ans`;
+}
+
+function renderForm(form) {
+  const container = document.getElementById('clinical-form');
+  container.innerHTML = '';
+  const choiceLists = form.definition.choice_lists || {};
+
+  const dateSection = document.createElement('div');
+  dateSection.className = 'section';
+  dateSection.innerHTML = `<div class="field"><label>Date de ce dépistage</label><input type="date" id="event-date" required></div>`;
+  container.appendChild(dateSection);
+  document.getElementById('event-date').value = new Date().toISOString().slice(0, 10);
+
+  const patientSection = document.createElement('div');
+  patientSection.className = 'section';
+  patientSection.innerHTML = `
+    <h2>Patient</h2>
+    <div class="field"><label>Prénom *</label><input type="text" id="patient-first-name" required autocomplete="off"></div>
+    <div class="field"><label>Nom *</label><input type="text" id="patient-last-name" required autocomplete="off"></div>
+    <div class="field"><label>Date de naissance</label><input type="date" id="patient-dob"><div class="field-hint" id="patient-age-hint"></div></div>
+    <div class="field"><label>Sexe</label><select id="patient-sex"><option value="">--</option><option value="M">M</option><option value="F">F</option></select></div>
+    <div class="field"><label>Téléphone</label><input type="text" id="patient-phone"></div>
+  `;
+  container.appendChild(patientSection);
+  // Âge affiché en direct sous la date de naissance, dès qu'elle est
+  // renseignée — jamais envoyé au serveur, juste un repère pendant la saisie.
+  document.getElementById('patient-dob').addEventListener('input', (e) => {
+    document.getElementById('patient-age-hint').textContent = e.target.value ? `Âge calculé : ${computeAge(e.target.value)}` : '';
+  });
+
+  (form.definition.sections || []).forEach(section => {
+    const sectionEl = document.createElement('div');
+    sectionEl.className = 'section';
+    if (section.relevant) sectionEl.dataset.relevant = section.relevant;
+    sectionEl.innerHTML = `<h2>${escapeHtml(section.title || '')}</h2>`;
+
+    (section.fields || []).forEach(field => {
+      const fieldEl = document.createElement('div');
+      fieldEl.className = 'field';
+      if (field.relevant) fieldEl.dataset.relevant = field.relevant;
+      if (field.alert_if) {
+        fieldEl.dataset.alertIf = field.alert_if;
+        fieldEl.dataset.alertMessage = field.alert_message || '';
+        fieldEl.dataset.alertSeverity = field.alert_severity || 'medium';
+        fieldEl.dataset.alertLabel = field.label || field.id;
+      }
+
+      const requiredAttr = field.required ? 'required data-originally-required="1"' : '';
+      const hintHtml = field.hint ? `<div class="field-hint">${escapeHtml(field.hint)}</div>` : '';
+      let inputHtml = '';
+
+      if (field.type === 'calculated') {
+        inputHtml = `<input type="text" data-field-id="${field.id}" data-calculated="true" data-formula="${(field.formula || '').replace(/"/g, '&quot;')}" readonly>`;
+      } else if (field.type === 'select_one') {
+        const options = resolveOptions(field, choiceLists).map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('');
+        inputHtml = `<select data-field-id="${field.id}" ${requiredAttr}><option value="">--</option>${options}</select>`;
+      } else if (field.type === 'select_multiple') {
+        const checkboxes = resolveOptions(field, choiceLists).map(o => `
+          <label class="checkbox-option"><input type="checkbox" value="${o.value}"><span>${escapeHtml(o.label)}</span></label>
+        `).join('');
+        fieldEl.innerHTML = `<label>${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>${hintHtml}
+          <div class="checkbox-group" data-field-id="${field.id}" data-type="select_multiple">${checkboxes}</div>`;
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else if (field.type === 'boolean') {
+        inputHtml = `<select data-field-id="${field.id}" ${requiredAttr}><option value="">--</option><option value="true">Oui</option><option value="false">Non</option></select>`;
+      } else if (field.type === 'date') {
+        inputHtml = `<input type="date" data-field-id="${field.id}" ${requiredAttr}>`;
+      } else if (field.type === 'number' || field.type === 'decimal') {
+        const validation = field.validation || {};
+        const minAttr = validation.min !== undefined ? ` min="${validation.min}"` : '';
+        const maxAttr = validation.max !== undefined ? ` max="${validation.max}"` : '';
+        const step = field.type === 'number' ? '1' : 'any';
+        inputHtml = `<input type="number" step="${step}" inputmode="decimal" data-field-id="${field.id}" ${requiredAttr}${minAttr}${maxAttr}>`;
+      } else if (field.type === 'note') {
+        fieldEl.innerHTML = `<p style="color:var(--ink-muted); font-style:italic; margin:0;">${escapeHtml(field.label)}</p>`;
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else if (['image', 'audio', 'video', 'file'].includes(field.type)) {
+        fieldEl.innerHTML = renderMediaFieldHtml(field, requiredAttr, hintHtml);
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else if (field.type === 'signature') {
+        fieldEl.innerHTML = renderSignatureFieldHtml(field, requiredAttr, hintHtml);
+        sectionEl.appendChild(fieldEl);
+        return;
+      } else {
+        const patternAttr = (field.validation && field.validation.pattern)
+          ? ` pattern="${field.validation.pattern.replace(/"/g, '&quot;')}"` : '';
+        inputHtml = `<input type="text" data-field-id="${field.id}" ${requiredAttr}${patternAttr}>`;
+      }
+
+      fieldEl.innerHTML = `<label>${escapeHtml(field.label)}${field.required ? ' *' : ''}</label>${hintHtml}${inputHtml}`;
+      sectionEl.appendChild(fieldEl);
+    });
+
+    container.appendChild(sectionEl);
+  });
+
+  // Les pavés de signature ont besoin d'être déjà dans la page (mise en page
+  // calculée) pour lire leur taille réelle avant de configurer le dessin.
+  document.querySelectorAll('.signature-canvas').forEach(c => initSignatureCanvas(c.dataset.canvasId));
+
+  container.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('input', () => { recomputeCalculatedFields(); recomputeConditions(); });
+    el.addEventListener('change', () => { recomputeCalculatedFields(); recomputeConditions(); });
+  });
+  recomputeCalculatedFields();
+  recomputeConditions();
+
+  const submitBar = document.createElement('div');
+  submitBar.className = 'submit-bar';
+  submitBar.innerHTML = `<button type="submit" id="submit-btn" class="btn btn-primary">Enregistrer</button>`;
+  container.appendChild(submitBar);
+}
+
+function round(x, n) {
+  const f = Math.pow(10, n);
+  return Math.round(x * f) / f;
+}
+
+function truthy(v) {
+  if (typeof v === 'boolean') return v;
+  if (v === null || v === undefined) return false;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') return v.trim() !== '';
+  return !!v;
+}
+
+function recomputeCalculatedFields() {
+  const values = fieldValues();
+  document.querySelectorAll('[data-calculated="true"]').forEach(el => {
+    try {
+      const result = evaluateFormula(el.dataset.formula, values);
+      if (typeof result === 'number') {
+        el.value = Number.isFinite(result) ? round(result, 2) : '';
+      } else if (typeof result === 'string') {
+        el.value = result;
+      } else if (typeof result === 'boolean') {
+        el.value = result ? 'Oui' : 'Non';
+      } else {
+        el.value = '';
+      }
+    } catch (e) {
+      el.value = '';
+    }
+  });
+}
+
+function recomputeConditions() {
+  const values = fieldValues();
+  const sectionVisibility = new Map();
+  document.querySelectorAll('.section').forEach(sectionEl => {
+    let visible = true;
+    if (sectionEl.dataset.relevant) {
+      try { visible = truthy(evaluateFormula(sectionEl.dataset.relevant, values)); }
+      catch (e) { visible = true; }
+    }
+    sectionEl.style.display = visible ? '' : 'none';
+    sectionVisibility.set(sectionEl, visible);
+  });
+
+  document.querySelectorAll('.field').forEach(el => {
+    const parentSection = el.closest('.section');
+    const sectionVisible = parentSection ? sectionVisibility.get(parentSection) !== false : true;
+    let ownVisible = true;
+    if (el.dataset.relevant) {
+      try { ownVisible = truthy(evaluateFormula(el.dataset.relevant, values)); }
+      catch (e) { ownVisible = true; }
+    }
+    const finalVisible = sectionVisible && ownVisible;
+    el.style.display = finalVisible ? '' : 'none';
+    const input = el.querySelector('[data-field-id]');
+    if (input) input.required = finalVisible && input.dataset.originallyRequired === '1';
+  });
+
+  const activeAlerts = [];
+  document.querySelectorAll('[data-alert-if]').forEach(el => {
+    const parentSection = el.closest('.section');
+    const sectionVisible = parentSection ? sectionVisibility.get(parentSection) !== false : true;
+    if (!sectionVisible) return;
+    let triggered = false;
+    try { triggered = truthy(evaluateFormula(el.dataset.alertIf, values)); } catch (e) { triggered = false; }
+    if (triggered) {
+      activeAlerts.push({
+        message: el.dataset.alertMessage || `Alerte sur ${el.dataset.alertLabel}`,
+        severity: el.dataset.alertSeverity || 'medium',
+      });
+    }
+  });
+  renderLiveAlerts(activeAlerts);
+}
+
+function renderLiveAlerts(alerts) {
+  const box = document.getElementById('live-alerts');
+  box.innerHTML = alerts.map(a => `<div class="alert-banner severity-${a.severity}">⚠️ ${escapeHtml(a.message)}</div>`).join('');
+}
+
+/* ── Soumission ── */
+
+function reEnableSubmit() {
+  const btn = document.getElementById('submit-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer'; }
+}
+
+function resetFormForNextEntry() {
+  currentIdempotencyKey = generateIdempotencyKey();
+  document.getElementById('patient-first-name').value = '';
+  document.getElementById('patient-last-name').value = '';
+  document.getElementById('patient-dob').value = '';
+  document.getElementById('patient-age-hint').textContent = '';
+  document.getElementById('patient-sex').value = '';
+  document.getElementById('patient-phone').value = '';
+  document.getElementById('event-date').value = new Date().toISOString().slice(0, 10);
+  document.querySelectorAll('[data-field-id]').forEach(el => {
+    if (el.dataset.type === 'select_multiple') {
+      el.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    } else {
+      el.value = '';
+    }
+  });
+  document.querySelectorAll('.media-preview').forEach(el => { el.innerHTML = ''; });
+  document.querySelectorAll('.media-status').forEach(el => { el.textContent = ''; });
+  // Le tracé déjà dessiné (les pixels) ne s'efface pas tout seul avec la
+  // remise à zéro générique ci-dessus (elle ne fait que vider .value, qui
+  // n'a pas de sens pour un <canvas>) — sans ça, le tracé de la personne
+  // précédente resterait affiché pour la suivante.
+  document.querySelectorAll('.signature-canvas').forEach(c => clearSignatureCanvas(c.dataset.canvasId));
+  recomputeCalculatedFields();
+  recomputeConditions();
+  reEnableSubmit();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('clinical-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorEl = document.getElementById('global-error');
+  const successEl = document.getElementById('success-message');
+  errorEl.classList.add('hidden');
+  successEl.classList.add('hidden');
+
+  const firstName = document.getElementById('patient-first-name').value.trim();
+  const lastName = document.getElementById('patient-last-name').value.trim();
+  if (!firstName || !lastName) {
+    errorEl.textContent = 'Le prénom et le nom du patient sont obligatoires.';
+    errorEl.classList.remove('hidden');
+    errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  const submitBtn = document.getElementById('submit-btn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Enregistrement…';
+
+  const patientPayload = {
+    first_name: firstName, last_name: lastName,
+    date_of_birth: document.getElementById('patient-dob').value || null,
+    sex: document.getElementById('patient-sex').value || null,
+    phone: document.getElementById('patient-phone').value || null,
+  };
+
+  let patientId = null;
+  let savedOffline = false;
+  try {
+    const res = await fetch(`/api/public/forms/${formId}/patients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Community-Code': unlockedCode },
+      body: JSON.stringify(patientPayload),
+      signal: AbortSignal.timeout(COMMUNITY_FETCH_TIMEOUT_MS),
+    });
+    if (res.status === 403) { handleCodeRejected(); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      errorEl.textContent = extractApiError(data, "Impossible d'enregistrer le patient.");
+      errorEl.classList.remove('hidden');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reEnableSubmit();
+      return;
+    }
+    const patient = await res.json();
+    patientId = patient.id;
+  } catch (netErr) {
+    if (!window.queueCommunityPatientOffline) {
+      errorEl.textContent = "Impossible d'enregistrer ce patient : ni connexion, ni stockage local disponible sur cet appareil.";
+      errorEl.classList.remove('hidden');
+      reEnableSubmit();
+      return;
+    }
+    patientId = await queueCommunityPatientOffline({
+      formId, firstName, lastName,
+      dateOfBirth: patientPayload.date_of_birth, sex: patientPayload.sex, phone: patientPayload.phone,
+    });
+    savedOffline = true;
+  }
+
+  const responses = fieldValues();
+  const collectedAtValue = document.getElementById('event-date').value;
+  const collectedAt = collectedAtValue ? new Date(collectedAtValue).toISOString() : null;
+
+  let submissionOfflineSaved = false;
+  try {
+    const res = await fetch(`/api/public/forms/${formId}/submissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Community-Code': unlockedCode },
+      body: JSON.stringify({ patient_id: patientId, responses, collected_at: collectedAt, idempotency_key: currentIdempotencyKey }),
+      signal: AbortSignal.timeout(COMMUNITY_FETCH_TIMEOUT_MS),
+    });
+    if (res.status === 403) { handleCodeRejected(); return; }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      errorEl.textContent = extractApiError(data, "Impossible d'enregistrer le formulaire.");
+      errorEl.classList.remove('hidden');
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      reEnableSubmit();
+      return;
+    }
+  } catch (netErr) {
+    if (!window.queueCommunitySubmissionOffline) {
+      errorEl.textContent = 'Impossible d\'enregistrer hors-ligne sur cet appareil.';
+      errorEl.classList.remove('hidden');
+      reEnableSubmit();
+      return;
+    }
+    await queueCommunitySubmissionOffline({
+      formId, patientId, responses, collectedAt, idempotencyKey: currentIdempotencyKey,
+    });
+    submissionOfflineSaved = true;
+  }
+
+  const wasOffline = savedOffline || submissionOfflineSaved;
+  successEl.textContent = wasOffline
+    ? 'Enregistré localement sur cet appareil — sera envoyé automatiquement au retour du réseau.'
+    : 'Enregistré avec succès. Merci !';
+  successEl.className = wasOffline ? 'alert-banner severity-medium' : 'alert-banner severity-low';
+  successEl.classList.remove('hidden');
+
+  updateCommunityStatus();
+  resetFormForNextEntry();
+});
+
+/* ── Mini-évaluateur de formules (même grammaire que backend/formula_engine.py) ── */
+function tokenize(expr) {
+  const tokens = [];
+  let i = 0;
+  while (i < expr.length) {
+    const c = expr[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (/[0-9.]/.test(c)) {
+      let num = '';
+      while (i < expr.length && /[0-9.]/.test(expr[i])) { num += expr[i]; i++; }
+      tokens.push({ type: 'number', value: parseFloat(num) });
+      continue;
+    }
+    if (/[a-zA-Z_]/.test(c)) {
+      let ident = '';
+      while (i < expr.length && /[a-zA-Z0-9_]/.test(expr[i])) { ident += expr[i]; i++; }
+      tokens.push({ type: 'ident', value: ident });
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      const quote = c;
+      i++;
+      let str = '';
+      while (i < expr.length && expr[i] !== quote) { str += expr[i]; i++; }
+      i++;
+      tokens.push({ type: 'string', value: str });
+      continue;
+    }
+    if (c === '=' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '==' }); i += 2; continue; }
+    if (c === '!' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '!=' }); i += 2; continue; }
+    if (c === '<' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '<=' }); i += 2; continue; }
+    if (c === '>' && expr[i + 1] === '=') { tokens.push({ type: 'op', value: '>=' }); i += 2; continue; }
+    if ('+-*/(),<>'.includes(c)) { tokens.push({ type: 'op', value: c }); i++; continue; }
+    throw new Error(`Caractère non autorisé dans la formule : "${c}"`);
+  }
+  return tokens;
+}
+
+const NUMERIC_FUNCTIONS = {
+  pow: (a, b) => Math.pow(a, b),
+  sqrt: (a) => Math.sqrt(a),
+  abs: (a) => Math.abs(a),
+  round: (a, n = 0) => pythonRound(a, n)
+};
+
+function pythonRound(value, ndigits) {
+  ndigits = ndigits || 0;
+  if (!isFinite(value)) return value;
+  const neg = value < 0;
+  const absVal = Math.abs(value);
+  const precise = absVal.toFixed(Math.min(20, Math.max(0, ndigits + 15)));
+  const dotIdx = precise.indexOf('.');
+  const intPart = precise.slice(0, dotIdx);
+  const fracPart = precise.slice(dotIdx + 1);
+  if (ndigits >= fracPart.length) return value;
+  const keep = fracPart.slice(0, ndigits);
+  const nextDigit = fracPart[ndigits];
+  const rest = fracPart.slice(ndigits + 1);
+  let roundUp;
+  if (nextDigit < '5') roundUp = false;
+  else if (nextDigit > '5') roundUp = true;
+  else {
+    const hasMoreAfter = /[1-9]/.test(rest);
+    if (hasMoreAfter) roundUp = true;
+    else {
+      const lastKept = ndigits > 0 ? (keep[ndigits - 1] || '0') : intPart[intPart.length - 1];
+      roundUp = (parseInt(lastKept, 10) % 2) === 1;
+    }
+  }
+  const combined = intPart + keep;
+  const asInt = BigInt(combined) + (roundUp ? 1n : 0n);
+  const combinedStr = asInt.toString().padStart(intPart.length + ndigits, '0');
+  const newIntPart = combinedStr.slice(0, combinedStr.length - ndigits) || '0';
+  const newFracPart = ndigits > 0 ? combinedStr.slice(combinedStr.length - ndigits) : '';
+  const result = parseFloat(newIntPart + (ndigits > 0 ? '.' + newFracPart : ''));
+  return neg ? -result : result;
+}
+
+const GENERIC_FUNCTIONS = {
+  if: (condition, trueVal, falseVal) => truthy(condition) ? trueVal : falseVal,
+  selected: (value, target) => {
+    if (Array.isArray(value)) return value.map(String).includes(String(target));
+    if (value === null || value === undefined) return false;
+    return String(value) === String(target);
+  },
+  coalesce: (...args) => {
+    for (const a of args) {
+      if (a !== null && a !== undefined && a !== '' && !(Array.isArray(a) && a.length === 0)) return a;
+    }
+    return args.length ? args[args.length - 1] : null;
+  },
+};
+
+function toNumber(v) {
+  if (v === null || v === undefined) return NaN;
+  if (typeof v === 'boolean') throw new Error("Impossible d'utiliser une valeur oui/non dans un calcul");
+  const n = parseFloat(v);
+  if (isNaN(n) && v !== '') throw new Error(`Valeur non numérique : "${v}"`);
+  return n;
+}
+
+function tryToNumber(v) {
+  if (v === null || v === undefined || typeof v === 'boolean') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function compareValues(op, left, right) {
+  if (left === null || left === undefined || right === null || right === undefined) {
+    if (op === '==') return left === right;
+    if (op === '!=') return left !== right;
+    return false;
+  }
+  const lNum = tryToNumber(left);
+  const rNum = tryToNumber(right);
+  let l, r;
+  if (lNum !== null && rNum !== null) { l = lNum; r = rNum; }
+  else { l = String(left); r = String(right); }
+  switch (op) {
+    case '==': return l === r;
+    case '!=': return l !== r;
+    case '<': return l < r;
+    case '>': return l > r;
+    case '<=': return l <= r;
+    case '>=': return l >= r;
+  }
+  throw new Error(`Opérateur inconnu : ${op}`);
+}
+
+function evaluateFormula(formula, values) {
+  const tokens = tokenize(formula);
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const advance = () => tokens[pos++];
+
+  function resolveIdent(name) {
+    if (name === 'true') return true;
+    if (name === 'false') return false;
+    if (!(name in values)) throw new Error(`Champ inconnu : ${name}`);
+    const v = values[name];
+    return v === '' ? null : v;
+  }
+
+  function parsePrimary() {
+    const t = peek();
+    if (!t) throw new Error('Formule incomplète');
+    if (t.type === 'number') { advance(); return t.value; }
+    if (t.type === 'string') { advance(); return t.value; }
+    if (t.type === 'ident') {
+      if (t.value === 'and' || t.value === 'or' || t.value === 'not') {
+        throw new Error(`'${t.value}' n'est pas attendu ici`);
+      }
+      advance();
+      if (peek() && peek().value === '(') {
+        advance();
+        const args = [];
+        if (peek() && peek().value !== ')') {
+          args.push(parseOr());
+          while (peek() && peek().value === ',') { advance(); args.push(parseOr()); }
+        }
+        if (!peek() || peek().value !== ')') throw new Error('Parenthèse manquante');
+        advance();
+        if (t.value in NUMERIC_FUNCTIONS) return NUMERIC_FUNCTIONS[t.value](...args.map(toNumber));
+        if (t.value in GENERIC_FUNCTIONS) return GENERIC_FUNCTIONS[t.value](...args);
+        throw new Error(`Fonction non autorisée : ${t.value}`);
+      }
+      return resolveIdent(t.value);
+    }
+    if (t.value === '(') {
+      advance();
+      const v = parseOr();
+      if (!peek() || peek().value !== ')') throw new Error('Parenthèse manquante');
+      advance();
+      return v;
+    }
+    if (t.value === '-') { advance(); return -toNumber(parsePrimary()); }
+    throw new Error('Formule invalide');
+  }
+
+  function parseMulDiv() {
+    let v = parsePrimary();
+    while (peek() && (peek().value === '*' || peek().value === '/')) {
+      const op = advance().value;
+      const rhs = parsePrimary();
+      v = op === '*' ? toNumber(v) * toNumber(rhs) : toNumber(v) / toNumber(rhs);
+    }
+    return v;
+  }
+
+  function parseAddSub() {
+    let v = parseMulDiv();
+    while (peek() && (peek().value === '+' || peek().value === '-')) {
+      const op = advance().value;
+      const rhs = parseMulDiv();
+      v = op === '+' ? toNumber(v) + toNumber(rhs) : toNumber(v) - toNumber(rhs);
+    }
+    return v;
+  }
+
+  function parseComparison() {
+    const v = parseAddSub();
+    if (peek() && ['==', '!=', '<', '>', '<=', '>='].includes(peek().value)) {
+      const op = advance().value;
+      const rhs = parseAddSub();
+      return compareValues(op, v, rhs);
+    }
+    return v;
+  }
+
+  function parseNot() {
+    if (peek() && peek().type === 'ident' && peek().value === 'not') {
+      advance();
+      return !truthy(parseNot());
+    }
+    return parseComparison();
+  }
+
+  function parseAnd() {
+    let v = parseNot();
+    while (peek() && peek().type === 'ident' && peek().value === 'and') {
+      advance();
+      const rhs = parseNot();
+      v = truthy(v) && truthy(rhs);
+    }
+    return v;
+  }
+
+  function parseOr() {
+    let v = parseAnd();
+    while (peek() && peek().type === 'ident' && peek().value === 'or') {
+      advance();
+      const rhs = parseAnd();
+      v = truthy(v) || truthy(rhs);
+    }
+    return v;
+  }
+
+  const result = parseOr();
+  if (pos < tokens.length) throw new Error('Formule invalide (caractères en trop)');
+  return result;
+}
+
+/* ── Démarrage ── */
+(async () => {
+  if (!formId) {
+    document.querySelector('.community-wrap').innerHTML = '<p style="padding:40px 16px; text-align:center;">Lien invalide : aucun formulaire indiqué.</p>';
+    return;
+  }
+  if ('serviceWorker' in navigator) {
+    // .update() force une vérification immédiate de sw.js (contourne le cache
+    // du navigateur pour ce fichier précis) plutôt que d'attendre le prochain
+    // contrôle automatique du navigateur — sur Firefox notamment, ce contrôle
+    // spontané peut être espacé de plusieurs heures.
+    navigator.serviceWorker.register('/sw.js')
+      .then((reg) => reg.update().catch(() => {}))
+      .catch(e => console.warn('Service Worker non enregistré :', e));
+  }
+  try {
+    await Promise.race([
+      offlineDb.open(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+    ]);
+  } catch (e) {
+    console.warn('Stockage local indisponible pour l\'instant.', e);
+  }
+
+  const unlocked = await tryUnlockWithStoredCode();
+  if (unlocked) {
+    showFormScreen();
+  } else {
+    document.getElementById('gate-screen').classList.remove('hidden');
+  }
+  updateCommunityStatus();
+})();
+</script>
+</body>
+</html>
