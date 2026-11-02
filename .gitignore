@@ -20,3 +20,17 @@ __pycache__/
 *.sql.gz
 *.sql.gz.gpg
 migration_clinique_*.sql
+
+# Exports Stitch — materiel de travail, hors du depot
+/stitch/
+
+# Captures d ecran de l application : elles montrent de vrais noms de patients,
+# les comptes du personnel et leur historique de connexion. Jamais dans le depot.
+/captures_clinique.zip
+captures_*.zip
+
+# Clone d un depot tiers (32 Mo) utilise une fois comme reference de design.
+/ui-ux-pro-max-skill/
+
+# Resultats d evaluation du skill : materiel de travail, regenerable.
+.claude/skills/*-workspace/

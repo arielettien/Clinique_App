@@ -9,12 +9,17 @@
 //    gérées explicitement par l'application, pas par un cache HTTP générique
 //    qui masquerait la fraîcheur réelle des données.
 
-const CACHE_NAME = 'clinique-app-shell-v1';
+// v4 : refonte du systeme de design dans style.css (contraste des boutons,
+// echelle typographique, elevation, cibles tactiles). Sans ce changement de
+// numero, les appareils deja visites continuent de servir l'ancienne feuille
+// depuis le cache et personne ne voit la mise a jour.
+const CACHE_NAME = 'clinique-app-shell-v8';
 const APP_SHELL_FILES = [
-  '/', '/login.html', '/style.css', '/app_shell.js', '/icons.js', '/dexie.min.js', '/offline_db.js',
+  '/', '/login.html', '/style.css', '/style_blanc_bleu.css', '/app_shell.js', '/icons.js', '/dexie.min.js', '/offline_db.js',
   '/index.html', '/project_hub.html', '/survey.html', '/follow_up.html',
   '/case_detail.html', '/history.html', '/submission.html', '/form_data.html',
   '/form_builder.html', '/users.html', '/audit_log.html', '/community.html', '/patients.html',
+  '/spreadsheets.html', '/tableur.html', '/tableur_engine.js',
 ];
 
 self.addEventListener('install', (event) => {
@@ -23,8 +28,21 @@ self.addEventListener('install', (event) => {
       // addAll échouerait entièrement si UN SEUL fichier manque (ex: une page
       // pas encore créée) — on ajoute donc individuellement, en ignorant les
       // échecs isolés, pour ne jamais bloquer l'installation du reste.
+      //
+      // `cache: 'no-store'` au lieu de cache.add() : cache.add() passe par le
+      // cache HTTP du navigateur, donc un nouveau cache de Service Worker
+      // pouvait se remplir avec les ANCIENS fichiers — on changeait le numéro
+      // de version pour rien, et la mise à jour n'arrivait jamais. Même piège
+      // que celui déjà rencontré sur Firefox avec le lien communautaire.
       return Promise.all(
-        APP_SHELL_FILES.map((url) => cache.add(url).catch((e) => console.warn('SW: échec cache', url, e)))
+        APP_SHELL_FILES.map((url) =>
+          fetch(url, { cache: 'no-store' })
+            .then((reponse) => {
+              if (!reponse.ok) throw new Error('HTTP ' + reponse.status);
+              return cache.put(url, reponse);
+            })
+            .catch((e) => console.warn('SW: échec cache', url, e))
+        )
       );
     })
   );

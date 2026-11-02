@@ -163,6 +163,81 @@ function extractApiError(data, fallback) {
 // certaines pages, pas à sa place — le fil d'Ariane pointe toujours vers un
 // niveau précis (le projet, le dossier...), ce bouton revient lui à
 // l'écran exact d'où on vient, avec ses filtres/onglets déjà choisis.
+// ── Aides de lecture des tableaux de dossiers ────────────────────────────
+// Placées ici plutôt que recopiées dans chaque page : la même règle doit
+// donner la même couleur partout, sinon « en retard » ne veut plus rien dire
+// d'une page à l'autre.
+
+// L'état d'un dossier tel qu'il doit se LIRE, qui n'est pas exactement son
+// statut en base : un dossier actif mais en retard de visite se lit comme un
+// retard, c'est ce qui demande une action.
+function etatDossier(c) {
+  if (!c) return 'actif';
+  if (c.status === 'closed') return 'clos';
+  if (c.status === 'lost') return 'perdu';
+  if (c.is_overdue) return 'retard';
+  return 'actif';
+}
+
+// « 18/10/2026 (16j) » — l'ancienneté à côté de la date.
+// Une date seule oblige à calculer de tête pour savoir si la visite est
+// vieille ; c'est ce calcul qu'on fait pour l'agent.
+function depuisJours(dateIso) {
+  if (!dateIso) return '';
+  const d = new Date(dateIso);
+  if (isNaN(d.getTime())) return '';
+  const jours = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (jours < 0) return '';                       // date saisie dans le futur
+  const texte = jours === 0 ? "auj." : jours + 'j';
+  return ` <span class="age-relatif">(${texte})</span>`;
+}
+
+// Barre supérieure commune à tous les écrans.
+//
+// Elle n'est écrite dans aucune page : on l'insère ici, en tête de .app-main,
+// pour qu'une seule modification couvre les 18 pages. C'est aussi ce qui
+// permet de la retirer d'un coup si elle ne convient pas.
+//
+// Elle porte trois choses, et rien d'autre : où l'on se trouve (le projet
+// courant), l'état de la liaison avec le serveur, et qui est connecté.
+function renderTopBar(user, projects, activeProjectId) {
+  const main = document.querySelector('.app-main');
+  if (!main || document.querySelector('.app-topbar')) return;
+
+  const projetActif = (projects || []).find(p => p.id === activeProjectId);
+  const contexte = projetActif ? projetActif.name : 'Tous les projets';
+  const nom = user.full_name || user.email;
+  // Initiales : deux lettres au plus, prises sur les deux premiers mots.
+  const initiales = nom.trim().split(/\s+/).slice(0, 2)
+    .map(m => m[0]).join('').toUpperCase() || '?';
+
+  const barre = document.createElement('header');
+  barre.className = 'app-topbar';
+  barre.innerHTML = `
+    <div class="topbar-contexte">
+      ${projetActif ? `<span class="topbar-pastille" style="background:${projectColor(projetActif.id)}"></span>` : ''}
+      <span class="topbar-lieu">${escapeHtmlShell(contexte)}</span>
+    </div>
+    <div class="topbar-actions">
+      <div id="online-indicator" class="online-indicator"></div>
+      <div class="topbar-user" title="${escapeHtmlShell(nom)}">
+        <span class="topbar-avatar" aria-hidden="true">${escapeHtmlShell(initiales)}</span>
+        <span class="topbar-nom">${escapeHtmlShell(nom)}</span>
+      </div>
+    </div>
+  `;
+  main.insertBefore(barre, main.firstChild);
+}
+
+// Les noms de projet et d'utilisateur viennent de la base : ils sont insérés
+// via innerHTML, donc échappés ici. Sans cela un projet nommé avec un chevron
+// casserait la barre — au mieux.
+function escapeHtmlShell(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function insertBackButton() {
   const main = document.querySelector('.app-main');
   // history.length <= 1 : cette page est la première de l'onglet (ouverte
@@ -175,7 +250,11 @@ function insertBackButton() {
   btn.className = 'back-button';
   btn.innerHTML = `${window.icon ? icon('arrow-left') : '←'} Précédent`;
   btn.addEventListener('click', () => window.history.back());
-  main.insertAdjacentElement('afterbegin', btn);
+  // La barre supérieure, si elle est déjà posée, doit rester le premier
+  // élément : le bouton se glisse juste en dessous, pas au-dessus.
+  const barre = main.querySelector(':scope > .app-topbar');
+  if (barre) barre.insertAdjacentElement('afterend', btn);
+  else main.insertAdjacentElement('afterbegin', btn);
 }
 
 async function initAppShell(activeProjectId) {
@@ -222,12 +301,16 @@ async function initAppShell(activeProjectId) {
     // barre latérale (pas une appli une-page, pas d'état JS qui survivrait).
     const projectsExpanded = localStorage.getItem('sidebar_projects_expanded') === '1';
 
+    // L'indicateur de connexion quitte la barre latérale pour la barre du haut
+    // (voir renderTopBar plus bas) : c'est l'information qu'un agent consulte
+    // le plus souvent sur le terrain, elle doit être au même endroit sur tous
+    // les écrans et sans avoir à chercher dans la colonne de navigation.
     slot.innerHTML = `
       <a class="brand" href="/">${ic('stethoscope')} Clinique</a>
-      <div id="online-indicator" class="online-indicator"></div>
       <nav>
         <a class="nav-link ${!activeProjectId ? 'active' : ''}" href="/">${ic('folder')} Tous les projets</a>
         <a class="nav-link" href="/patients.html">${ic('users')} Patients</a>
+        <a class="nav-link" href="/tableur.html">${ic('file-spreadsheet')} Tableur</a>
         <button type="button" id="projects-toggle" class="nav-section-toggle" aria-expanded="${projectsExpanded ? 'true' : 'false'}">
           <span>Projets</span>
           <span class="toggle-chevron">${ic(projectsExpanded ? 'chevron-up' : 'chevron-down')}</span>
@@ -246,6 +329,8 @@ async function initAppShell(activeProjectId) {
         <button id="shell-logout-btn" type="button">${ic('log-out')} Se déconnecter</button>
       </div>
     `;
+
+    renderTopBar(user, projects, activeProjectId);
     if (window.updateOnlineIndicator) updateOnlineIndicator();
 
     const projectsToggleBtn = document.getElementById('projects-toggle');

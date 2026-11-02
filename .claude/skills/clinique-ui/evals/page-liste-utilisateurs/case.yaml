@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: page-liste-utilisateurs
+expected_outcome: |
+  Une page de liste cohérente avec le reste de l'application : coquille commune
+  (initAppShell), échelle typographique et variables de style.css respectées,
+  icônes du jeu local plutôt que des emojis, états vide/chargement/erreur
+  présents, zones de clic d'au moins 44 px, lisible sur téléphone.

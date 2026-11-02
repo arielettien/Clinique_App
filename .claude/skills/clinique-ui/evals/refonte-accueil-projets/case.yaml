@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: refonte-accueil-projets
+expected_outcome: |
+  Même page, mais visiblement plus soignée : hiérarchie typographique nette,
+  espacement généreux entre les groupes, élévation plutôt que bordures partout,
+  un seul bouton d'action principale. Toutes les fonctions d'origine sont
+  conservées (recherche, création, tuiles avec image, Infos et modification).

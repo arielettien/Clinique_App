@@ -63,5 +63,9 @@ function icon(name, opts) {
   const cls = opts.class ? ' ' + opts.class : '';
   const svg = ICONS[name];
   if (!svg) { console.warn('Icone inconnue:', name); return ''; }
-  return `<svg class="icon${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svg}</svg>`;
+  // aria-hidden : une icone est toujours DECORATIVE ici — elle accompagne un
+  // libelle visible, ou se trouve dans un bouton qui porte deja son aria-label.
+  // Sans cet attribut, un lecteur d'ecran annonce un objet graphique vide
+  // avant chaque libelle, ce qui rend la navigation au son insupportable.
+  return `<svg class="icon${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${svg}</svg>`;
 }

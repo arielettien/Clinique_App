@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tableurs — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { font-size: 1.35rem; margin: 4px 0; }
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius-md);
+    padding: 20px; text-align: center; background: var(--surface-muted);
+    margin-bottom: var(--space-4);
+  }
+  .upload-zone.dragover { border-color: var(--primary); background: var(--surface); }
+  .sheet-list { display: flex; flex-direction: column; gap: 8px; }
+  .sheet-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--surface); cursor: pointer;
+  }
+  .sheet-item:hover { border-color: var(--primary); }
+  .sheet-item.active { border-color: var(--primary); background: var(--surface-muted); }
+  .sheet-item .title { font-weight: 600; font-size: 0.95rem; }
+  .sheet-item .meta { font-size: 0.8rem; color: var(--ink-muted); margin-top: 2px; }
+  .sheet-item .actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  .preview-wrap { margin-top: var(--space-5); }
+  .sheet-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .sheet-tab {
+    padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); cursor: pointer; font-size: 0.85rem; font-family: inherit;
+  }
+  .sheet-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  #preview-table-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  table.preview { border-collapse: collapse; font-size: 0.85rem; white-space: nowrap; }
+  table.preview th, table.preview td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; }
+  /* Première ligne et première colonne figées : sans ça, dès qu'on fait
+     défiler un grand tableau on ne sait plus à quoi correspond une valeur. */
+  table.preview thead th { position: sticky; top: 0; background: var(--surface-muted); z-index: 2; }
+  table.preview tbody td:first-child, table.preview thead th:first-child {
+    position: sticky; left: 0; background: var(--surface-muted); z-index: 1; font-weight: 600;
+  }
+  .row-num { color: var(--ink-faint); font-weight: 400 !important; }
+</style>
+  <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
+       le theme l'emporte sur les reglages locaux herites de l'ancienne
+       charte. Retirer cette ligne suffit a revenir a l'apparence
+       precedente : aucune autre modification n'a ete faite. -->
+  <link rel="stylesheet" href="/style_blanc_bleu.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb">
+      <a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="/">…</a> / Tableurs
+    </div>
+
+    <h1>📊 Module 3 : Tableurs</h1>
+    <p style="color:var(--ink-muted); margin-top:4px;">
+      Déposez ici les tableurs de suivi du projet. Ils restent consultables par toute l'équipe,
+      même quand la personne qui les tient n'est pas là.
+    </p>
+
+    <div id="error-box"></div>
+
+    <div class="upload-zone" id="upload-zone">
+      <p style="margin:0 0 10px 0;">Glissez un fichier ici, ou :</p>
+      <input type="file" id="file-input" accept=".xlsx,.xlsm,.csv" style="display:none;">
+      <button type="button" class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+        Choisir un fichier
+      </button>
+      <p class="field-hint" style="margin:10px 0 0 0;">Formats acceptés : .xlsx, .xlsm, .csv — 15 Mo maximum.</p>
+    </div>
+
+    <div id="upload-status"></div>
+
+    <h2 class="section-title" style="font-size:1.05rem;">Tableurs du projet</h2>
+    <div class="sheet-list" id="sheet-list"><p style="color:var(--ink-muted);">Chargement…</p></div>
+
+    <div class="preview-wrap" id="preview-wrap" style="display:none;">
+      <h2 class="section-title" style="font-size:1.05rem;" id="preview-title">Aperçu</h2>
+      <div class="sheet-tabs" id="sheet-tabs"></div>
+      <div id="preview-note" class="field-hint" style="margin-bottom:6px;"></div>
+      <div id="preview-table-wrap"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const projectId = params.get('project_id');
+let currentSheets = [];
+let currentSheetIndex = 0;
+let currentSpreadsheetId = null;
+
+function escapeHtmlSheet(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function showError(msg) {
+  document.getElementById('error-box').innerHTML =
+    '<div class="error-msg" style="background:#FEF2F2;border:1px solid #FCA5A5;color:#B91C1C;padding:12px 16px;border-radius:var(--radius-md);font-size:0.9rem;margin-bottom:12px;">' + escapeHtmlSheet(msg) + '</div>';
+}
+function clearError() { document.getElementById('error-box').innerHTML = ''; }
+
+function formatSize(octets) {
+  if (!octets) return '—';
+  if (octets < 1024) return octets + ' o';
+  if (octets < 1024 * 1024) return Math.round(octets / 1024) + ' Ko';
+  return (octets / (1024 * 1024)).toFixed(1) + ' Mo';
+}
+
+if (!projectId) {
+  document.body.innerHTML = '<p style="padding:40px;">Aucun projet sélectionné. <a href="/">Retour</a></p>';
+}
+
+(async () => {
+  document.getElementById('breadcrumb-project').href = `/project_hub.html?project_id=${projectId}`;
+  const user = await initAppShell(projectId);
+  if (!user) return;
+  renderIconSlots(document);
+
+  try {
+    const res = await fetch(`/api/projects/${projectId}`, { credentials: 'same-origin' });
+    if (res.ok) {
+      const p = await res.json();
+      document.getElementById('breadcrumb-project').textContent = p.name;
+      document.title = `${p.name} — Tableurs`;
+    }
+  } catch (e) { /* hors ligne : le fil d'Ariane reste générique */ }
+
+  await loadSpreadsheets();
+})();
+
+async function loadSpreadsheets() {
+  const box = document.getElementById('sheet-list');
+  const res = await fetch(`/api/projects/${projectId}/spreadsheets`, { credentials: 'same-origin' });
+  if (!res.ok) { box.innerHTML = '<p style="color:var(--ink-muted);">Erreur de chargement.</p>'; return; }
+  const rows = await res.json();
+
+  if (rows.length === 0) {
+    box.innerHTML = '<div class="empty-state"><span class="empty-icon">📊</span>Aucun tableur déposé pour ce projet.</div>';
+    document.getElementById('preview-wrap').style.display = 'none';
+    return;
+  }
+
+  box.innerHTML = rows.map(s => `
+    <div class="sheet-item ${s.id === currentSpreadsheetId ? 'active' : ''}" data-id="${s.id}">
+      <div style="min-width:0;">
+        <div class="title">${escapeHtmlSheet(s.title)}</div>
+        <div class="meta">
+          ${escapeHtmlSheet(s.original_filename)} · ${formatSize(s.size_bytes)}
+          · déposé par ${escapeHtmlSheet(s.uploaded_by || '—')}
+          · mis à jour le ${new Date(s.updated_at).toLocaleDateString('fr-FR')}
+        </div>
+      </div>
+      <div class="actions">
+        <a class="btn btn-ghost btn-sm" href="/api/spreadsheets/${s.id}/download" onclick="event.stopPropagation();">⬇️ Télécharger</a>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); renameSpreadsheet('${s.id}')">✏️ Renommer</button>
+        <button type="button" class="btn btn-ghost btn-sm" style="color:#B91C1C;" onclick="event.stopPropagation(); deleteSpreadsheet('${s.id}')">🗑 Supprimer</button>
+      </div>
+    </div>`).join('');
+
+  box.querySelectorAll('.sheet-item').forEach(el => {
+    el.addEventListener('click', () => openPreview(el.dataset.id));
+  });
+
+  // Ouvre automatiquement le premier tableur : arriver sur une page qui
+  // n'affiche rien alors que des fichiers existent donne l'impression que
+  // l'aperçu ne marche pas.
+  if (!currentSpreadsheetId) openPreview(rows[0].id);
+}
+
+async function openPreview(id) {
+  currentSpreadsheetId = id;
+  clearError();
+  document.querySelectorAll('.sheet-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
+
+  const wrap = document.getElementById('preview-wrap');
+  const tableWrap = document.getElementById('preview-table-wrap');
+  wrap.style.display = 'block';
+  tableWrap.innerHTML = '<p style="color:var(--ink-muted); padding:12px;">Lecture du fichier…</p>';
+
+  const res = await fetch(`/api/spreadsheets/${id}/preview`, { credentials: 'same-origin' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    tableWrap.innerHTML = '';
+    showError(extractApiError(data, "Impossible d'afficher ce fichier."));
+    return;
+  }
+  const payload = await res.json();
+  currentSheets = payload.sheets || [];
+  currentSheetIndex = 0;
+  document.getElementById('preview-title').textContent = `Aperçu — ${payload.spreadsheet.title}`;
+  renderSheetTabs();
+  renderSheet();
+}
+
+function renderSheetTabs() {
+  const tabs = document.getElementById('sheet-tabs');
+  if (currentSheets.length <= 1) { tabs.innerHTML = ''; return; }
+  tabs.innerHTML = currentSheets.map((sh, i) =>
+    `<button type="button" class="sheet-tab ${i === currentSheetIndex ? 'active' : ''}" onclick="selectSheet(${i})">${escapeHtmlSheet(sh.name)}</button>`
+  ).join('');
+}
+
+function selectSheet(i) {
+  currentSheetIndex = i;
+  renderSheetTabs();
+  renderSheet();
+}
+
+function renderSheet() {
+  const wrap = document.getElementById('preview-table-wrap');
+  const note = document.getElementById('preview-note');
+  const sheet = currentSheets[currentSheetIndex];
+
+  if (!sheet || sheet.rows.length === 0) {
+    wrap.innerHTML = '<p style="color:var(--ink-muted); padding:12px;">Cette feuille est vide.</p>';
+    note.textContent = '';
+    return;
+  }
+
+  // La première ligne du tableur sert d'en-tête : c'est la convention dans
+  // tous les tableurs de suivi, et ça rend le tableau lisible sans réglage.
+  const [entetes, ...lignes] = sheet.rows;
+  let html = '<table class="preview"><thead><tr><th class="row-num">#</th>';
+  html += entetes.map(c => `<th>${escapeHtmlSheet(c)}</th>`).join('');
+  html += '</tr></thead><tbody>';
+  lignes.forEach((ligne, i) => {
+    html += `<tr><td class="row-num">${i + 2}</td>`;
+    for (let c = 0; c < entetes.length; c++) {
+      html += `<td>${escapeHtmlSheet(ligne[c] !== undefined ? ligne[c] : '')}</td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  note.textContent = sheet.truncated
+    ? `Aperçu des ${lignes.length} premières lignes seulement — télécharge le fichier pour le voir en entier.`
+    : `${lignes.length} ligne(s).`;
+}
+
+/* ── Dépôt d'un fichier ── */
+
+const zone = document.getElementById('upload-zone');
+['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
+  e.preventDefault(); zone.classList.add('dragover');
+}));
+['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, e => {
+  e.preventDefault(); zone.classList.remove('dragover');
+}));
+zone.addEventListener('drop', e => {
+  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files.length) uploadFile(e.target.files[0]);
+});
+
+async function uploadFile(file) {
+  clearError();
+  const statut = document.getElementById('upload-status');
+  statut.innerHTML = `<p style="color:var(--ink-muted);">Envoi de « ${escapeHtmlSheet(file.name)} »…</p>`;
+
+  const titre = prompt('Nom à donner à ce tableur :', file.name.replace(/\.[^/.]+$/, ''));
+  if (titre === null) { statut.innerHTML = ''; return; }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('title', titre);
+
+  const res = await fetch(`/api/projects/${projectId}/spreadsheets`, {
+    method: 'POST', credentials: 'same-origin', body: formData,
+  });
+  statut.innerHTML = '';
+  document.getElementById('file-input').value = '';
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    showError(extractApiError(data, "Impossible de déposer ce fichier."));
+    return;
+  }
+  const cree = await res.json();
+  currentSpreadsheetId = cree.id;
+  await loadSpreadsheets();
+  openPreview(cree.id);
+}
+
+async function renameSpreadsheet(id) {
+  const item = document.querySelector(`.sheet-item[data-id="${id}"] .title`);
+  const nouveau = prompt('Nouveau nom :', item ? item.textContent : '');
+  if (!nouveau || !nouveau.trim()) return;
+
+  const formData = new FormData();
+  formData.append('title', nouveau.trim());
+  const res = await fetch(`/api/spreadsheets/${id}`, {
+    method: 'PUT', credentials: 'same-origin', body: formData,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    showError(extractApiError(data, 'Renommage impossible.'));
+    return;
+  }
+  await loadSpreadsheets();
+  if (currentSpreadsheetId === id) openPreview(id);
+}
+
+async function deleteSpreadsheet(id) {
+  if (!confirm('Supprimer définitivement ce tableur ? Le fichier sera perdu.')) return;
+  const res = await fetch(`/api/spreadsheets/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    showError(extractApiError(data, 'Suppression impossible.'));
+    return;
+  }
+  if (currentSpreadsheetId === id) {
+    currentSpreadsheetId = null;
+    document.getElementById('preview-wrap').style.display = 'none';
+  }
+  await loadSpreadsheets();
+}
+</script>
+</body>
+</html>

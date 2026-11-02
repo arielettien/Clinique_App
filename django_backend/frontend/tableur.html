@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tableur — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { font-size: 1.3rem; margin: 4px 0; }
+
+  .wb-list { display: flex; flex-direction: column; gap: 8px; }
+  .wb-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--surface); cursor: pointer;
+  }
+  .wb-item:hover { border-color: var(--primary); }
+  .wb-item .title { font-weight: 600; }
+  .wb-item .meta { font-size: 0.8rem; color: var(--ink-muted); margin-top: 2px; }
+
+  .toolbar {
+    display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+  }
+  .toolbar .sep { width: 1px; height: 22px; background: var(--border); margin: 0 3px; }
+  .tb-btn {
+    padding: 5px 9px; font-size: 0.82rem; font-family: inherit; cursor: pointer;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  }
+  .tb-btn:hover:not(:disabled) { border-color: var(--primary); }
+  .tb-btn:disabled { opacity: 0.4; cursor: default; }
+  .tb-btn.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .tb-select {
+    padding: 5px 7px; font-size: 0.8rem; font-family: inherit;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  }
+  input[type=color].tb-color {
+    width: 30px; height: 28px; padding: 1px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface);
+  }
+
+  .formula-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .cell-ref {
+    min-width: 66px; text-align: center; font-family: var(--font-mono); font-size: 0.85rem;
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+  }
+  #formula-input {
+    flex: 1; padding: 6px 10px; font-family: var(--font-mono); font-size: 0.88rem;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+
+  #grid-wrap { overflow: auto; max-height: 66vh; border: 1px solid var(--border); border-radius: var(--radius-sm); position: relative; }
+  table.grid { border-collapse: separate; border-spacing: 0; font-size: 0.85rem; table-layout: fixed; }
+  table.grid th, table.grid td {
+    border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    padding: 0; height: 26px; overflow: hidden;
+  }
+  table.grid thead th {
+    position: sticky; top: 0; z-index: 3; background: var(--surface-muted);
+    font-weight: 600; font-size: 0.78rem; text-align: center; user-select: none;
+  }
+  table.grid tbody th {
+    position: sticky; left: 0; z-index: 2; background: var(--surface-muted);
+    font-weight: 600; font-size: 0.78rem; text-align: center;
+    width: 46px; color: var(--ink-muted); user-select: none;
+  }
+  table.grid thead th:first-child { left: 0; z-index: 4; width: 46px; }
+  table.grid td { background: var(--surface); }
+  table.grid td .cell {
+    padding: 3px 7px; min-height: 20px; white-space: pre; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Retour à la ligne : la hauteur déclarée sur les cellules agit comme un
+     minimum en disposition tableau, la ligne s'agrandit donc d'elle-même. */
+  table.grid td .cell.retour {
+    white-space: pre-wrap; overflow-wrap: anywhere; text-overflow: clip;
+  }
+  table.grid td.num .cell { text-align: right; font-variant-numeric: tabular-nums; }
+  table.grid td.err .cell { color: #B91C1C; font-weight: 600; }
+  table.grid td.sel { box-shadow: inset 0 0 0 2px var(--primary); }
+  table.grid td.in-range { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+  .col-head.sel, .row-head.sel { background: color-mix(in srgb, var(--primary) 22%, var(--surface-muted)) !important; }
+
+  /* Poignée de redimensionnement sur le bord droit d'un en-tête de colonne */
+  .col-head { position: relative; }
+  .col-resize {
+    position: absolute; top: 0; right: -3px; width: 7px; height: 100%;
+    cursor: col-resize; z-index: 5;
+  }
+  .row-head { position: relative; }
+  .row-resize {
+    position: absolute; left: 0; bottom: -3px; width: 100%; height: 7px;
+    cursor: row-resize; z-index: 5;
+  }
+  /* Poignée de recopie, au coin inférieur droit de la sélection */
+  /* Le zoom agit sur la taille du texte et des cellules plutôt que par une
+     mise à l'échelle CSS : les en-têtes figés continuent ainsi de fonctionner. */
+  table.grid { font-size: calc(0.85rem * var(--zoom, 1)); }
+  table.grid th, table.grid td { height: calc(26px * var(--zoom, 1)); }
+  table.grid td .cell { padding: calc(3px * var(--zoom, 1)) calc(7px * var(--zoom, 1)); }
+
+  .palette {
+    position: absolute; z-index: 40; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.14); padding: 10px; display: none;
+  }
+  .palette.open { display: block; }
+  .palette-grid { display: grid; grid-template-columns: repeat(10, 20px); gap: 4px; }
+  .palette-case {
+    width: 20px; height: 20px; border: 1px solid rgba(0,0,0,0.15);
+    border-radius: 3px; cursor: pointer; padding: 0;
+  }
+  .palette-case:hover { outline: 2px solid var(--primary); }
+  .palette-action {
+    display: block; width: 100%; margin-top: 8px; padding: 5px; font-size: 0.8rem;
+    font-family: inherit; cursor: pointer; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .palette-action:hover { border-color: var(--primary); }
+  .apercu-couleur { display: inline-block; width: 13px; height: 13px; border: 1px solid rgba(0,0,0,0.2); border-radius: 2px; vertical-align: -2px; margin-left: 3px; }
+
+  /* Éditeur superposé exactement sur la cellule : saisir DANS la cellule,
+     comme dans Excel, au lieu de devoir passer par la barre du haut. */
+  #cell-editor {
+    position: absolute; display: none; z-index: 20; resize: none; overflow: hidden;
+    border: 2px solid var(--primary); outline: none; background: var(--surface);
+    font-family: inherit; padding: 2px 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    line-height: 1.25;
+  }
+
+  #fill-handle {
+    position: absolute; width: 9px; height: 9px; background: var(--primary);
+    border: 1px solid #fff; cursor: crosshair; z-index: 6; display: none;
+  }
+
+  .sheet-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  .sheet-tab {
+    padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); cursor: pointer; font-size: 0.83rem; font-family: inherit;
+  }
+  .sheet-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  .save-state { font-size: 0.8rem; color: var(--ink-muted); margin-left: auto; }
+  .save-state.unsaved { color: #B45309; font-weight: 600; }
+  .help-box { font-size: 0.82rem; color: var(--ink-muted); margin-top: 12px; line-height: 1.6; }
+  .help-box code { background: var(--surface-muted); padding: 1px 5px; border-radius: 4px; font-size: 0.8rem; }
+</style>
+  <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
+       le theme l'emporte sur les reglages locaux herites de l'ancienne
+       charte. Retirer cette ligne suffit a revenir a l'apparence
+       precedente : aucune autre modification n'a ete faite. -->
+  <link rel="stylesheet" href="/style_blanc_bleu.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div id="view-list">
+      <h1>📐 Tableur</h1>
+      <p style="color:var(--ink-muted); margin-top:4px;">
+        Des classeurs créés et modifiés directement ici, partagés avec toute l'équipe.
+        Indépendants des projets.
+      </p>
+      <div style="margin:var(--space-4) 0;">
+        <button type="button" class="btn btn-primary" onclick="creerClasseur()">+ Nouveau classeur</button>
+      </div>
+      <div class="wb-list" id="wb-list"><p style="color:var(--ink-muted);">Chargement…</p></div>
+    </div>
+
+    <div id="view-editor" style="display:none;">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="retourListe()">← Tous les classeurs</button>
+        <h1 id="wb-title" style="margin:0;">Classeur</h1>
+        <button type="button" class="tb-btn" onclick="renommerClasseur()">✏️ Renommer</button>
+        <button type="button" class="tb-btn" onclick="telechargerExcel()">⬇️ Télécharger (Excel)</button>
+        <span class="save-state" id="save-state">Enregistré</span>
+      </div>
+
+      <div id="error-box"></div>
+
+      <div class="toolbar">
+        <button type="button" class="tb-btn" id="btn-undo" onclick="annuler()" title="Annuler (Ctrl+Z)">↶</button>
+        <button type="button" class="tb-btn" id="btn-redo" onclick="retablir()" title="Rétablir (Ctrl+Y)">↷</button>
+        <span class="sep"></span>
+        <button type="button" class="tb-btn" id="btn-gras" onclick="basculerStyle('b')" title="Gras (Ctrl+B)"><strong>G</strong></button>
+        <button type="button" class="tb-btn" id="btn-italique" onclick="basculerStyle('i')" title="Italique (Ctrl+I)"><em>I</em></button>
+        <button type="button" class="tb-btn" id="btn-majuscule" onclick="basculerCasse('upper')" title="Tout en MAJUSCULES">AA</button>
+        <button type="button" class="tb-btn" id="btn-minuscule" onclick="basculerCasse('lower')" title="Tout en minuscules">aa</button>
+        <button type="button" class="tb-btn" onclick="changerTaillePolice(-1)" title="Réduire la police">A−</button>
+        <button type="button" class="tb-btn" id="btn-taille" onclick="reinitialiserTaillePolice()" title="Revenir à la taille normale">100 %</button>
+        <button type="button" class="tb-btn" onclick="changerTaillePolice(1)" title="Agrandir la police">A+</button>
+        <button type="button" class="tb-btn" id="btn-gauche" onclick="definirAlignement('left')" title="Aligner à gauche">⬅</button>
+        <button type="button" class="tb-btn" id="btn-centre" onclick="definirAlignement('center')" title="Centrer">⬌</button>
+        <button type="button" class="tb-btn" id="btn-droite" onclick="definirAlignement('right')" title="Aligner à droite">➡</button>
+        <button type="button" class="tb-btn" id="btn-haut" onclick="definirAlignementVertical('top')" title="Aligner en haut">⤒</button>
+        <button type="button" class="tb-btn" id="btn-milieu" onclick="definirAlignementVertical('middle')" title="Centrer verticalement">⇕</button>
+        <button type="button" class="tb-btn" id="btn-bas" onclick="definirAlignementVertical('bottom')" title="Aligner en bas">⤓</button>
+        <button type="button" class="tb-btn" id="btn-retour" onclick="basculerRetourLigne()" title="Retour à la ligne dans la cellule">↵ Renvoyer</button>
+        <button type="button" class="tb-btn" onclick="ouvrirPalette(event,'c')" title="Couleur du texte">A<span class="apercu-couleur" id="apercu-texte" style="background:#111827"></span></button>
+        <button type="button" class="tb-btn" onclick="ouvrirPalette(event,'bg')" title="Couleur de fond">▧<span class="apercu-couleur" id="apercu-fond" style="background:#ffffff"></span></button>
+        <button type="button" class="tb-btn" onclick="effacerMiseEnForme()" title="Enlever la mise en forme">⌫ Format</button>
+        <select class="tb-select" id="select-format" onchange="definirFormatNombre(this.value)" title="Format des nombres"></select>
+        <span class="sep"></span>
+        <button type="button" class="tb-btn" onclick="fusionner()">⬌ Fusionner</button>
+        <button type="button" class="tb-btn" onclick="defusionner()">⬍ Défusionner</button>
+        <span class="sep"></span>
+        <button type="button" class="tb-btn" onclick="copierSelection()" title="Ctrl+C">⧉ Copier</button>
+        <button type="button" class="tb-btn" onclick="collerDepuisPressePapier()" title="Ctrl+V">📋 Coller</button>
+        <button type="button" class="tb-btn" onclick="recopierVersLeBas()" title="Ctrl+B bas : recopier la 1re ligne de la sélection">⬇ Recopier</button>
+        <button type="button" class="tb-btn" onclick="viderSelection()" title="Suppr">⌫ Effacer</button>
+        <span class="sep"></span>
+        <button type="button" class="tb-btn" onclick="insererLigne()">+ Ligne</button>
+        <button type="button" class="tb-btn" onclick="supprimerLigne()">− Ligne</button>
+        <button type="button" class="tb-btn" onclick="insererColonne()">+ Col.</button>
+        <button type="button" class="tb-btn" onclick="supprimerColonne()">− Col.</button>
+        <span class="sep"></span>
+        <button type="button" class="tb-btn" onclick="zoomer(-1)" title="Réduire (Ctrl+molette)">🔍−</button>
+        <button type="button" class="tb-btn" id="btn-zoom" onclick="reinitialiserZoom()" title="Revenir à 100 %">100 %</button>
+        <button type="button" class="tb-btn" onclick="zoomer(1)" title="Agrandir (Ctrl+molette)">🔍+</button>
+      </div>
+
+      <div class="palette" id="palette">
+        <div class="palette-grid" id="palette-grid"></div>
+        <button type="button" class="palette-action" onclick="appliquerCouleurPalette(null)">⌫ Aucune couleur</button>
+        <button type="button" class="palette-action" onclick="choisirCouleurLibre()">🎨 Autre couleur…</button>
+        <input type="color" id="couleur-libre" style="display:none;" onchange="appliquerCouleurPalette(this.value)">
+      </div>
+
+      <div class="formula-bar">
+        <div class="cell-ref" id="cell-ref">A1</div>
+        <input type="text" id="formula-input" placeholder="Valeur ou formule (ex : =SOMME(A1:A10))" autocomplete="off">
+      </div>
+
+      <div id="grid-wrap"><div id="fill-handle"></div><textarea id="cell-editor" spellcheck="false"></textarea></div>
+
+      <div class="sheet-tabs" id="sheet-tabs"></div>
+
+      <div class="help-box">
+        <strong>Formules</strong> — commence par <code>=</code>. Opérations <code>+ − * / ^ %</code>,
+        parenthèses, comparaisons, <code>&amp;</code> pour coller du texte.
+        Fonctions : <code>SOMME</code> <code>MOYENNE</code> <code>MIN</code> <code>MAX</code> <code>NB</code>
+        <code>NBVAL</code> <code>SI</code> <code>ARRONDI</code> <code>ABS</code> <code>RACINE</code>
+        <code>ENT</code> <code>PUISSANCE</code> <code>MEDIANE</code> (noms anglais acceptés).<br>
+        <strong>Références</strong> — <code>A1</code> se décale à la recopie, <code>$A$1</code> reste fixe.<br>
+        <strong>Recopier</strong> — tire le petit carré bleu en bas à droite de la sélection, ou bouton ⬇ Recopier.<br>
+        <strong>Feuilles</strong> — <strong>double-clic sur un onglet</strong> pour le renommer,
+        <code>+ Feuille</code> pour en ajouter. Les noms suivent les règles d'Excel
+        (31 caractères maximum, pas de <code>/ * ? : [ ]</code>, pas de doublon).<br>
+        <strong>Saisie</strong> — tape directement dans la cellule, ou passe par la barre du haut :
+        les deux marchent et restent synchronisées. <code>F2</code> ou double-clic pour modifier,
+        <code>Alt+Entrée</code> pour un saut de ligne dans la cellule.<br>
+        <strong>Dimensions</strong> — tire le trait entre deux en-têtes de colonne pour la largeur,
+        entre deux numéros de ligne pour la hauteur.<br>
+        <strong>Mise en forme</strong> — gras, italique, MAJUSCULES/minuscules, taille,
+        alignement horizontal (⬅ ⬌ ➡) et vertical (⤒ ⇕ ⤓), couleurs,
+        <strong>↵ Renvoyer</strong> pour qu'un texte long revienne à la ligne dans la cellule.<br>
+        <strong>Sélection</strong> — glisse à la souris, <code>Maj+clic</code>,
+        <code>Maj+flèches</code> pour étendre, <code>Ctrl+flèches</code> pour sauter au bord des données,
+        <code>Ctrl+A</code> tout, <code>Maj+Espace</code> la ligne, clic sur un en-tête pour la colonne.<br>
+        <strong>Raccourcis</strong> — <code>Ctrl+Z</code> annuler · <code>Ctrl+Y</code> rétablir ·
+        <code>Ctrl+S</code> enregistrer · <code>Ctrl+C/X/V</code> copier-couper-coller ·
+        <code>Ctrl+B</code> gras · <code>F2</code> modifier · <code>Suppr</code> effacer ·
+        <code>Ctrl+molette</code> zoom (25 % à 300 %).<br>
+        <strong>Excel</strong> — le bouton <strong>Télécharger (Excel)</strong> produit un .xlsx où les
+        formules restent vivantes : les totaux continuent de se recalculer dans Excel.<br>
+        L'enregistrement se fait <strong>automatiquement</strong> quelques secondes après chaque modification.
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script src="/tableur_engine.js"></script>
+<script>
+const E = window.TableurEngine;
+const LARGEUR_PAR_DEFAUT = 96;
+const PROFONDEUR_HISTORIQUE = 60;
+const DELAI_ENREGISTREMENT_AUTO = 2500;   // ms après la dernière modification
+
+let classeurs = [];
+let classeur = null;
+let feuilleIndex = 0;
+let selection = { l: 0, c: 0, l2: 0, c2: 0 };
+let modifie = false;
+let presse = null;
+let historique = [];
+let futur = [];
+let minuterieEnregistrement = null;
+
+function feuille() { return classeur.content.sheets[feuilleIndex]; }
+function echapper(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function showError(msg) {
+  document.getElementById('error-box').innerHTML =
+    '<div style="background:#FEF2F2;border:1px solid #FCA5A5;color:#B91C1C;padding:10px 14px;border-radius:var(--radius-md);font-size:0.88rem;margin:8px 0;">' + echapper(msg) + '</div>';
+}
+function clearError() { document.getElementById('error-box').innerHTML = ''; }
+
+/* ══════════════════════════════════════════════════════════════
+ *  Point de passage UNIQUE de toute modification du classeur.
+ *
+ *  Tout ce qui change le contenu passe par ici : c'est ce qui rend
+ *  l'annulation fiable. Si une fonction modifiait le classeur sans passer
+ *  par modifier(), son effet deviendrait impossible à annuler — et le
+ *  défaut ne se verrait qu'au moment où l'utilisateur en a besoin.
+ * ══════════════════════════════════════════════════════════════ */
+
+function instantane() { return JSON.stringify(classeur.content); }
+
+function modifier(fn) {
+  const avant = instantane();
+  fn();
+  // Rien n'a bougé (clic sur « gras » déjà gras, etc.) : on n'encombre pas
+  // l'historique d'étapes vides, que l'utilisateur devrait annuler pour rien.
+  if (instantane() === avant) { dessiner(); return; }
+  historique.push(avant);
+  if (historique.length > PROFONDEUR_HISTORIQUE) historique.shift();
+  futur = [];
+  marquerModifie();
+  dessiner();
+}
+
+function annuler() {
+  if (!historique.length) return;
+  futur.push(instantane());
+  classeur.content = JSON.parse(historique.pop());
+  feuilleIndex = Math.min(feuilleIndex, classeur.content.sheets.length - 1);
+  marquerModifie(); dessinerOnglets(); dessiner();
+}
+
+function retablir() {
+  if (!futur.length) return;
+  historique.push(instantane());
+  classeur.content = JSON.parse(futur.pop());
+  feuilleIndex = Math.min(feuilleIndex, classeur.content.sheets.length - 1);
+  marquerModifie(); dessinerOnglets(); dessiner();
+}
+
+function marquerModifie() {
+  modifie = true;
+  const el = document.getElementById('save-state');
+  el.textContent = 'Modifié — enregistrement…';
+  el.classList.add('unsaved');
+  clearTimeout(minuterieEnregistrement);
+  minuterieEnregistrement = setTimeout(enregistrer, DELAI_ENREGISTREMENT_AUTO);
+}
+
+/* ══════════ Liste des classeurs ══════════ */
+
+(async () => {
+  const user = await initAppShell(null);
+  if (!user) return;
+  renderIconSlots(document);
+  remplirSelecteurFormat();
+  await chargerListe();
+})();
+
+function remplirSelecteurFormat() {
+  document.getElementById('select-format').innerHTML =
+    Object.entries(E.FORMATS).map(([k, f]) => `<option value="${k}">${f.libelle}</option>`).join('');
+}
+
+async function chargerListe() {
+  const box = document.getElementById('wb-list');
+  const res = await fetch('/api/workbooks', { credentials: 'same-origin' });
+  if (!res.ok) { box.innerHTML = '<p style="color:var(--ink-muted);">Erreur de chargement.</p>'; return; }
+  classeurs = await res.json();
+
+  if (classeurs.length === 0) {
+    box.innerHTML = '<div class="empty-state"><span class="empty-icon">📐</span>Aucun classeur. Crée le premier ci-dessus.</div>';
+    return;
+  }
+  box.innerHTML = classeurs.map(w => `
+    <div class="wb-item" data-id="${w.id}">
+      <div style="min-width:0;">
+        <div class="title">${echapper(w.title)}</div>
+        <div class="meta">créé par ${echapper(w.created_by || '—')}
+          · modifié le ${new Date(w.updated_at).toLocaleDateString('fr-FR')}
+          ${w.updated_by ? 'par ' + echapper(w.updated_by) : ''}</div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" style="color:#B91C1C;"
+              onclick="event.stopPropagation(); supprimerClasseur('${w.id}')">🗑 Supprimer</button>
+    </div>`).join('');
+  box.querySelectorAll('.wb-item').forEach(el =>
+    el.addEventListener('click', () => ouvrirClasseur(el.dataset.id)));
+}
+
+function feuilleVide(nom) {
+  return { name: nom, cells: {}, merges: [], rows: 40, cols: 15, colWidths: {}, rowHeights: {} };
+}
+
+async function creerClasseur() {
+  const titre = prompt('Nom du classeur :', 'Nouveau classeur');
+  if (!titre || !titre.trim()) return;
+  const res = await fetch('/api/workbooks', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: titre.trim(), content: { sheets: [feuilleVide('Feuille 1')] } }),
+  });
+  if (!res.ok) {
+    showError(extractApiError(await res.json().catch(() => ({})), 'Création impossible.'));
+    return;
+  }
+  const cree = await res.json();
+  await chargerListe();
+  ouvrirClasseurObjet(cree);
+}
+
+async function supprimerClasseur(id) {
+  if (!confirm('Supprimer définitivement ce classeur ?')) return;
+  const res = await fetch(`/api/workbooks/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+  if (!res.ok) { showError('Suppression impossible.'); return; }
+  await chargerListe();
+}
+
+async function ouvrirClasseur(id) {
+  const res = await fetch(`/api/workbooks/${id}`, { credentials: 'same-origin' });
+  if (!res.ok) { showError('Ouverture impossible.'); return; }
+  ouvrirClasseurObjet(await res.json());
+}
+
+function ouvrirClasseurObjet(w) {
+  classeur = w;
+  if (!classeur.content || !Array.isArray(classeur.content.sheets) || !classeur.content.sheets.length) {
+    classeur.content = { sheets: [feuilleVide('Feuille 1')] };
+  }
+  // Les classeurs créés par une version antérieure n'ont pas colWidths :
+  // on complète plutôt que de planter à l'ouverture.
+  classeur.content.sheets.forEach(sh => {
+    if (!sh.colWidths) sh.colWidths = {};
+    if (!sh.rowHeights) sh.rowHeights = {};
+    if (!sh.merges) sh.merges = [];
+  });
+  feuilleIndex = 0;
+  selection = { l: 0, c: 0, l2: 0, c2: 0 };
+  historique = []; futur = []; modifie = false;
+  document.getElementById('wb-title').textContent = w.title;
+  etatEnregistre();
+  document.getElementById('view-list').style.display = 'none';
+  document.getElementById('view-editor').style.display = 'block';
+  clearError();
+  dessinerOnglets();
+  dessiner();
+  restaurerZoom();
+}
+
+function retourListe() {
+  if (modifie) enregistrer();
+  classeur = null;
+  clearTimeout(minuterieEnregistrement);
+  document.getElementById('view-editor').style.display = 'none';
+  document.getElementById('view-list').style.display = 'block';
+  chargerListe();
+}
+
+/* ══════════ Calcul ══════════ */
+
+let cache = {};
+let enCours = new Set();
+
+function cellule(ref) { return feuille().cells[ref]; }
+function valeurBrute(ref) { const c = cellule(ref); return c === undefined ? '' : c.v; }
+function styleDe(ref) { const c = cellule(ref); return (c && c.s) || {}; }
+
+function valeurCalculee(ref) {
+  if (ref in cache) return cache[ref];
+  const brute = valeurBrute(ref);
+  if (typeof brute !== 'string' || !brute.startsWith('=')) {
+    if (brute === '' || brute === null || brute === undefined) { cache[ref] = ''; return ''; }
+    const n = parseFloat(String(brute).replace(',', '.'));
+    const valeur = (!isNaN(n) && String(brute).trim().match(/^-?[\d\s.,]+$/)) ? n : brute;
+    cache[ref] = valeur;
+    return valeur;
+  }
+  if (enCours.has(ref)) { cache[ref] = E.ERREUR_CYCLE; return cache[ref]; }
+  enCours.add(ref);
+  let resultat;
+  try {
+    resultat = E.evaluerFormule(brute.slice(1), valeurCalculee);
+  } catch (err) {
+    resultat = E.TOUTES_ERREURS.includes(err.message) ? err.message : E.ERREUR_VALEUR;
+  }
+  enCours.delete(ref);
+  cache[ref] = resultat;
+  return resultat;
+}
+
+/* ══════════ Dessin ══════════ */
+
+function normSel() {
+  return {
+    l1: Math.min(selection.l, selection.l2), l2: Math.max(selection.l, selection.l2),
+    c1: Math.min(selection.c, selection.c2), c2: Math.max(selection.c, selection.c2),
+  };
+}
+function recouverte(l, c) {
+  return feuille().merges.some(m =>
+    l >= m.l && l < m.l + m.rs && c >= m.c && c < m.c + m.cs && !(l === m.l && c === m.c));
+}
+function fusionEn(l, c) { return feuille().merges.find(m => m.l === l && m.c === c) || null; }
+function largeur(c) { return feuille().colWidths[c] || LARGEUR_PAR_DEFAUT; }
+function hauteur(l) { return (feuille().rowHeights || {})[l] || null; }
+
+function dessiner() {
+  cache = {}; enCours = new Set();
+  const f = feuille();
+  const s = normSel();
+
+  let html = '<table class="grid"><colgroup><col style="width:46px">';
+  for (let c = 0; c < f.cols; c++) html += `<col style="width:${largeur(c)}px">`;
+  html += '</colgroup><thead><tr><th></th>';
+  for (let c = 0; c < f.cols; c++) {
+    const actif = c >= s.c1 && c <= s.c2 ? ' sel' : '';
+    html += `<th class="col-head${actif}" data-col="${c}">${E.indexVersLettres(c)}<div class="col-resize" data-resize="${c}"></div></th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  for (let l = 0; l < f.rows; l++) {
+    const actifL = l >= s.l1 && l <= s.l2 ? ' sel' : '';
+    const h = hauteur(l);
+    html += `<tr${h ? ` style="height:${h}px"` : ''}>`
+         +  `<th class="row-head${actifL}" data-row="${l}">${l + 1}`
+         +  `<div class="row-resize" data-resize-row="${l}"></div></th>`;
+    for (let c = 0; c < f.cols; c++) {
+      if (recouverte(l, c)) continue;
+      const m = fusionEn(l, c);
+      const span = m ? ` rowspan="${m.rs}" colspan="${m.cs}"` : '';
+      const ref = E.coordVersRef(l, c);
+      const val = valeurCalculee(ref);
+      const st = styleDe(ref);
+      const estErreur = typeof val === 'string' && E.TOUTES_ERREURS.includes(val);
+
+      const classes = [];
+      if (l >= s.l1 && l <= s.l2 && c >= s.c1 && c <= s.c2) {
+        classes.push(l === selection.l && c === selection.c ? 'sel' : 'in-range');
+      }
+      if (typeof val === 'number' && !st.a) classes.push('num');
+      if (estErreur) classes.push('err');
+
+      const styleCell = [
+        st.b ? 'font-weight:700' : '',
+        st.i ? 'font-style:italic' : '',
+        st.a ? `text-align:${st.a}` : '',
+        st.c ? `color:${st.c}` : '',
+        st.tt ? `text-transform:${st.tt === 'upper' ? 'uppercase' : 'lowercase'}` : '',
+        // La taille est un pourcentage de la taille courante : elle se
+        // combine donc avec le zoom au lieu de le contredire.
+        st.fs ? `font-size:${st.fs}%` : '',
+      ].filter(Boolean).join(';');
+      const partiesTd = [];
+      if (st.bg) partiesTd.push(`background:${st.bg}`);
+      if (st.va) partiesTd.push(`vertical-align:${st.va}`);
+      const styleTd = partiesTd.length ? ` style="${partiesTd.join(';')}"` : '';
+
+      html += `<td class="${classes.join(' ')}"${span}${styleTd} data-l="${l}" data-c="${c}">`
+            + `<div class="cell${st.w ? ' retour' : ''}"${styleCell ? ` style="${styleCell}"` : ''}>`
+            + `${echapper(E.afficherAvecFormat(val, st.nf || 'standard'))}</div></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+
+  const wrap = document.getElementById('grid-wrap');
+  const posX = wrap.scrollLeft, posY = wrap.scrollTop;
+  // Ces deux éléments vivent DANS la zone de grille pour défiler avec elle :
+  // il faut donc les mettre de côté avant de reconstruire le tableau, sinon
+  // innerHTML les détruit et les variables qui les référencent pointent dans
+  // le vide.
+  const poignee = document.getElementById('fill-handle');
+  const champEdition = document.getElementById('cell-editor');
+  wrap.innerHTML = html;
+  wrap.appendChild(poignee);
+  wrap.appendChild(champEdition);
+  wrap.scrollLeft = posX; wrap.scrollTop = posY;
+
+  brancherEvenementsGrille(wrap);
+  placerPoignee();
+  majBarreFormule();
+  majBoutons();
+}
+
+function brancherEvenementsGrille(wrap) {
+  wrap.querySelectorAll('td').forEach(td => {
+    td.addEventListener('mousedown', ev => {
+      if (ev.button !== 0) return;
+      const l = +td.dataset.l, c = +td.dataset.c;
+      if (ev.shiftKey) { selection.l2 = l; selection.c2 = c; }
+      else { selection = { l, c, l2: l, c2: c }; }
+      majSurbrillance();
+      demarrerGlisse();
+      ev.preventDefault();
+    });
+    td.addEventListener('dblclick', () => {
+      selection = { l: +td.dataset.l, c: +td.dataset.c, l2: +td.dataset.l, c2: +td.dataset.c };
+      dessiner();
+      demarrerEdition('');
+    });
+  });
+
+  wrap.querySelectorAll('.col-head[data-col]').forEach(th => {
+    th.addEventListener('mousedown', ev => {
+      if (ev.target.classList.contains('col-resize') || ev.button !== 0) return;
+      const c = +th.dataset.col;
+      if (ev.shiftKey) { selection.c2 = c; selection.l = 0; selection.l2 = feuille().rows - 1; }
+      else selection = { l: 0, c, l2: feuille().rows - 1, c2: c };
+      majSurbrillance();
+      demarrerGlisse('colonne');
+      ev.preventDefault();
+    });
+  });
+
+  wrap.querySelectorAll('.row-head[data-row]').forEach(th => {
+    th.addEventListener('mousedown', ev => {
+      if (ev.target.classList.contains('row-resize') || ev.button !== 0) return;
+      const l = +th.dataset.row;
+      if (ev.shiftKey) { selection.l2 = l; selection.c = 0; selection.c2 = feuille().cols - 1; }
+      else selection = { l, c: 0, l2: l, c2: feuille().cols - 1 };
+      majSurbrillance();
+      demarrerGlisse('ligne');
+      ev.preventDefault();
+    });
+  });
+
+  wrap.querySelectorAll('.col-resize').forEach(h => h.addEventListener('mousedown', demarrerRedimensionnement));
+  wrap.querySelectorAll('.row-resize').forEach(h => h.addEventListener('mousedown', demarrerRedimensionnementLigne));
+}
+
+/* ── Sélection à la souris ──
+ *
+ * Pendant un glissé, on ne redessine SURTOUT pas le tableau : remplacer le
+ * DOM à chaque mouvement de souris rendrait le geste saccadé et ferait
+ * perdre la cellule survolée. On se contente de déplacer les classes de
+ * surbrillance, ce qui est quasi instantané même sur une grande feuille.
+ */
+function majSurbrillance() {
+  const wrap = document.getElementById('grid-wrap');
+  const s = normSel();
+  wrap.querySelectorAll('td').forEach(td => {
+    const l = +td.dataset.l, c = +td.dataset.c;
+    const dedans = l >= s.l1 && l <= s.l2 && c >= s.c1 && c <= s.c2;
+    td.classList.toggle('sel', dedans && l === selection.l && c === selection.c);
+    td.classList.toggle('in-range', dedans && !(l === selection.l && c === selection.c));
+  });
+  wrap.querySelectorAll('.col-head[data-col]').forEach(th => {
+    const c = +th.dataset.col;
+    th.classList.toggle('sel', c >= s.c1 && c <= s.c2);
+  });
+  wrap.querySelectorAll('.row-head[data-row]').forEach(th => {
+    const l = +th.dataset.row;
+    th.classList.toggle('sel', l >= s.l1 && l <= s.l2);
+  });
+  placerPoignee();
+  majBarreFormule();
+  majBoutons();
+}
+
+function demarrerGlisse(mode) {
+  const wrap = document.getElementById('grid-wrap');
+
+  function bouger(e) {
+    const cible = document.elementFromPoint(e.clientX, e.clientY);
+    if (!cible || !cible.closest) return;
+
+    if (mode === 'colonne') {
+      const th = cible.closest('.col-head[data-col]');
+      if (th) { selection.c2 = +th.dataset.col; majSurbrillance(); }
+    } else if (mode === 'ligne') {
+      const th = cible.closest('.row-head[data-row]');
+      if (th) { selection.l2 = +th.dataset.row; majSurbrillance(); }
+    } else {
+      const td = cible.closest('td[data-l]');
+      if (td) { selection.l2 = +td.dataset.l; selection.c2 = +td.dataset.c; majSurbrillance(); }
+    }
+    faireDefilerSiBord(e, wrap);
+  }
+  function relacher() {
+    document.removeEventListener('mousemove', bouger);
+    document.removeEventListener('mouseup', relacher);
+  }
+  document.addEventListener('mousemove', bouger);
+  document.addEventListener('mouseup', relacher);
+}
+
+// Fait défiler quand on glisse jusqu'au bord : sans ça, impossible de
+// sélectionner au-delà de ce qui est visible à l'écran.
+function faireDefilerSiBord(e, wrap) {
+  const r = wrap.getBoundingClientRect();
+  const marge = 36, pas = 22;
+  if (e.clientY > r.bottom - marge) wrap.scrollTop += pas;
+  else if (e.clientY < r.top + marge) wrap.scrollTop -= pas;
+  if (e.clientX > r.right - marge) wrap.scrollLeft += pas;
+  else if (e.clientX < r.left + marge) wrap.scrollLeft -= pas;
+}
+
+/* ── Redimensionnement de colonne ── */
+function demarrerRedimensionnement(ev) {
+  ev.preventDefault(); ev.stopPropagation();
+  const col = +ev.target.dataset.resize;
+  const departX = ev.clientX;
+  const departLargeur = largeur(col);
+
+  function bouger(e) {
+    const nouvelle = Math.max(40, Math.min(420, departLargeur + (e.clientX - departX)));
+    const colonne = document.querySelectorAll('#grid-wrap table.grid colgroup col')[col + 1];
+    if (colonne) colonne.style.width = nouvelle + 'px';
+  }
+  function relacher(e) {
+    document.removeEventListener('mousemove', bouger);
+    document.removeEventListener('mouseup', relacher);
+    const nouvelle = Math.max(40, Math.min(420, departLargeur + (e.clientX - departX)));
+    if (nouvelle !== departLargeur) modifier(() => { feuille().colWidths[col] = nouvelle; });
+  }
+  document.addEventListener('mousemove', bouger);
+  document.addEventListener('mouseup', relacher);
+}
+
+function demarrerRedimensionnementLigne(ev) {
+  ev.preventDefault(); ev.stopPropagation();
+  const ligne = +ev.target.dataset.resizeRow;
+  const departY = ev.clientY;
+  const rangee = ev.target.closest('tr');
+  const departHauteur = hauteur(ligne) || rangee.offsetHeight;
+
+  function bouger(e) {
+    rangee.style.height = Math.max(18, Math.min(400, departHauteur + (e.clientY - departY))) + 'px';
+  }
+  function relacher(e) {
+    document.removeEventListener('mousemove', bouger);
+    document.removeEventListener('mouseup', relacher);
+    const nouvelle = Math.max(18, Math.min(400, departHauteur + (e.clientY - departY)));
+    if (nouvelle !== departHauteur) {
+      modifier(() => {
+        const f = feuille();
+        if (!f.rowHeights) f.rowHeights = {};
+        f.rowHeights[ligne] = nouvelle;
+      });
+    }
+  }
+  document.addEventListener('mousemove', bouger);
+  document.addEventListener('mouseup', relacher);
+}
+
+/* ── Poignée de recopie ── */
+function placerPoignee() {
+  const poignee = document.getElementById('fill-handle');
+  const s = normSel();
+  const wrap = document.getElementById('grid-wrap');
+  const td = wrap.querySelector(`td[data-l="${s.l2}"][data-c="${s.c2}"]`);
+  if (!td) { poignee.style.display = 'none'; return; }
+  poignee.style.display = 'block';
+  poignee.style.left = (td.offsetLeft + td.offsetWidth - 5) + 'px';
+  poignee.style.top = (td.offsetTop + td.offsetHeight - 5) + 'px';
+}
+
+document.getElementById('fill-handle').addEventListener('mousedown', ev => {
+  ev.preventDefault(); ev.stopPropagation();
+  const depart = normSel();
+  const wrap = document.getElementById('grid-wrap');
+
+  function bouger(e) {
+    const cible = document.elementFromPoint(e.clientX, e.clientY);
+    const td = cible && cible.closest ? cible.closest('td[data-l]') : null;
+    if (!td) return;
+    // On n'étend que vers le bas ou vers la droite : étendre vers le haut
+    // demanderait de décider quelle ligne est la « source », ce qui n'a pas
+    // de réponse évidente.
+    selection.l2 = Math.max(depart.l2, +td.dataset.l);
+    selection.c2 = Math.max(depart.c2, +td.dataset.c);
+    dessiner();
+  }
+  function relacher() {
+    document.removeEventListener('mousemove', bouger);
+    document.removeEventListener('mouseup', relacher);
+    recopier(depart, normSel());
+  }
+  document.addEventListener('mousemove', bouger);
+  document.addEventListener('mouseup', relacher);
+});
+
+function recopier(source, cible) {
+  if (cible.l2 === source.l2 && cible.c2 === source.c2) return;
+  modifier(() => E.recopierBloc(feuille(), source, cible));
+}
+
+function recopierVersLeBas() {
+  const s = normSel();
+  if (s.l1 === s.l2) { showError('Sélectionne la ligne source ET les lignes à remplir.'); return; }
+  clearError();
+  recopier({ l1: s.l1, l2: s.l1, c1: s.c1, c2: s.c2 }, s);
+}
+
+/* ══════════ Barre de formule et boutons ══════════ */
+
+function majBarreFormule() {
+  const ref = E.coordVersRef(selection.l, selection.c);
+  document.getElementById('cell-ref').textContent = ref;
+  if (!editionEnCours) document.getElementById('formula-input').value = valeurBrute(ref) ?? '';
+}
+
+function majBoutons() {
+  const st = styleDe(E.coordVersRef(selection.l, selection.c));
+  document.getElementById('btn-gras').classList.toggle('on', !!st.b);
+  document.getElementById('btn-italique').classList.toggle('on', !!st.i);
+  document.getElementById('btn-gauche').classList.toggle('on', st.a === 'left');
+  document.getElementById('btn-centre').classList.toggle('on', st.a === 'center');
+  document.getElementById('btn-droite').classList.toggle('on', st.a === 'right');
+  document.getElementById('btn-haut').classList.toggle('on', st.va === 'top');
+  document.getElementById('btn-milieu').classList.toggle('on', st.va === 'middle');
+  document.getElementById('btn-bas').classList.toggle('on', st.va === 'bottom');
+  document.getElementById('btn-retour').classList.toggle('on', !!st.w);
+  document.getElementById('btn-majuscule').classList.toggle('on', st.tt === 'upper');
+  document.getElementById('btn-minuscule').classList.toggle('on', st.tt === 'lower');
+  document.getElementById('btn-taille').textContent = (st.fs || 100) + ' %';
+  document.getElementById('select-format').value = st.nf || 'standard';
+  document.getElementById('apercu-texte').style.background = st.c || '#111827';
+  document.getElementById('apercu-fond').style.background = st.bg || '#ffffff';
+  document.getElementById('btn-undo').disabled = historique.length === 0;
+  document.getElementById('btn-redo').disabled = futur.length === 0;
+}
+
+function etatEnregistre() {
+  const el = document.getElementById('save-state');
+  el.textContent = 'Enregistré';
+  el.classList.remove('unsaved');
+}
+
+/* ══════════ Mise en forme ══════════ */
+
+function parcourirSelection(fn) {
+  const s = normSel();
+  const f = feuille();
+  for (let l = s.l1; l <= s.l2; l++) {
+    for (let c = s.c1; c <= s.c2; c++) fn(E.coordVersRef(l, c), f);
+  }
+}
+
+function appliquerStyle(modifierStyle) {
+  modifier(() => parcourirSelection((ref, f) => {
+    const cell = f.cells[ref] || { v: '' };
+    cell.s = cell.s || {};
+    modifierStyle(cell.s);
+    // Un style vide ne sert à rien : on le retire pour ne pas alourdir le
+    // fichier enregistré de milliers d'objets {} inutiles.
+    if (Object.keys(cell.s).length === 0) delete cell.s;
+    if (cell.v === '' && !cell.s) delete f.cells[ref];
+    else f.cells[ref] = cell;
+  }));
+}
+
+function basculerStyle(cle) {
+  const actuel = !!styleDe(E.coordVersRef(selection.l, selection.c))[cle];
+  appliquerStyle(s => { if (actuel) delete s[cle]; else s[cle] = 1; });
+}
+function definirAlignement(valeur) {
+  const actuel = styleDe(E.coordVersRef(selection.l, selection.c)).a;
+  appliquerStyle(s => { if (actuel === valeur) delete s.a; else s.a = valeur; });
+}
+/* ── Palette de couleurs ──
+ *
+ * Un simple <input type="color"> ne permet pas de RETIRER une couleur une
+ * fois posée : il renvoie toujours une couleur. D'où cette palette, avec un
+ * « Aucune couleur » explicite — le défaut signalé à l'usage.
+ */
+const COULEURS_PALETTE = [
+  '#000000','#434343','#666666','#999999','#b7b7b7','#cccccc','#d9d9d9','#efefef','#f3f3f3','#ffffff',
+  '#980000','#ff0000','#ff9900','#ffff00','#00ff00','#00ffff','#4a86e8','#0000ff','#9900ff','#ff00ff',
+  '#e6b8af','#f4cccc','#fce5cd','#fff2cc','#d9ead3','#d0e0e3','#c9daf8','#cfe2f3','#d9d2e9','#ead1dc',
+  '#dd7e6b','#ea9999','#f9cb9c','#ffe599','#b6d7a8','#a2c4c9','#a4c2f4','#9fc5e8','#b4a7d6','#d5a6bd',
+  '#a61c00','#cc0000','#e69138','#f1c232','#6aa84f','#45818e','#3c78d8','#3d85c6','#674ea7','#a64d79',
+];
+let cibleCouleur = 'c';
+
+function ouvrirPalette(ev, cle) {
+  ev.stopPropagation();
+  cibleCouleur = cle;
+  const palette = document.getElementById('palette');
+  document.getElementById('palette-grid').innerHTML = COULEURS_PALETTE.map(c =>
+    `<button type="button" class="palette-case" style="background:${c}" title="${c}" onclick="appliquerCouleurPalette('${c}')"></button>`
+  ).join('');
+  const r = ev.currentTarget.getBoundingClientRect();
+  palette.style.left = (r.left + window.scrollX) + 'px';
+  palette.style.top = (r.bottom + window.scrollY + 4) + 'px';
+  palette.classList.add('open');
+}
+
+function fermerPalette() { document.getElementById('palette').classList.remove('open'); }
+document.addEventListener('mousedown', e => {
+  const palette = document.getElementById('palette');
+  if (palette.classList.contains('open') && !palette.contains(e.target)) fermerPalette();
+});
+
+function appliquerCouleurPalette(valeur) {
+  const cle = cibleCouleur;
+  appliquerStyle(s => { if (valeur === null) delete s[cle]; else s[cle] = valeur; });
+  fermerPalette();
+}
+
+function choisirCouleurLibre() {
+  const input = document.getElementById('couleur-libre');
+  input.value = styleDe(E.coordVersRef(selection.l, selection.c))[cibleCouleur]
+             || (cibleCouleur === 'c' ? '#111827' : '#ffffff');
+  input.click();
+}
+
+/* ── Zoom ──
+ *
+ * Agit sur la taille du texte et des cellules (variable CSS --zoom) plutôt
+ * que par une mise à l'échelle de l'ensemble : une mise à l'échelle CSS
+ * casserait les en-têtes figés en haut et à gauche.
+ * Le niveau est propre à chaque utilisateur, donc gardé dans le navigateur
+ * et non dans le classeur partagé.
+ */
+// On descend jusqu'à 25 % : avec une feuille de plusieurs dizaines de
+// colonnes, voir l'ensemble d'un coup d'œil vaut mieux que de pouvoir lire
+// chaque cellule — on zoome ensuite sur la zone qui intéresse.
+const NIVEAUX_ZOOM = [0.25, 0.33, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+const ZOOM_NORMAL = 8;   // position de 100 % dans la liste
+let indexZoom = ZOOM_NORMAL;
+
+function appliquerZoom() {
+  const z = NIVEAUX_ZOOM[indexZoom];
+  document.getElementById('grid-wrap').style.setProperty('--zoom', z);
+  document.getElementById('btn-zoom').textContent = Math.round(z * 100) + ' %';
+  try { localStorage.setItem('tableur_zoom', String(indexZoom)); } catch (e) { /* mode privé */ }
+}
+function zoomer(sens) {
+  indexZoom = Math.max(0, Math.min(NIVEAUX_ZOOM.length - 1, indexZoom + sens));
+  appliquerZoom();
+  placerPoignee();
+}
+function reinitialiserZoom() { indexZoom = ZOOM_NORMAL; appliquerZoom(); placerPoignee(); }
+
+function restaurerZoom() {
+  try {
+    const garde = parseInt(localStorage.getItem('tableur_zoom'), 10);
+    if (!isNaN(garde) && garde >= 0 && garde < NIVEAUX_ZOOM.length) indexZoom = garde;
+  } catch (e) { /* mode privé */ }
+  appliquerZoom();
+}
+
+document.getElementById('grid-wrap').addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  zoomer(e.deltaY < 0 ? 1 : -1);
+}, { passive: false });
+// MAJUSCULES / minuscules : c'est un style d'AFFICHAGE, la valeur saisie
+// n'est pas modifiée. On peut donc revenir en arrière sans rien perdre, et
+// une formule continue de voir le texte d'origine.
+function definirAlignementVertical(valeur) {
+  const actuel = styleDe(E.coordVersRef(selection.l, selection.c)).va;
+  appliquerStyle(s => { if (actuel === valeur) delete s.va; else s.va = valeur; });
+}
+
+// Retour à la ligne dans la cellule, comme « Renvoyer à la ligne
+// automatiquement » dans Excel. Sans lui, un texte long est simplement coupé
+// à la largeur de la colonne : la donnée est là, mais invisible.
+function basculerRetourLigne() {
+  const actuel = !!styleDe(E.coordVersRef(selection.l, selection.c)).w;
+  appliquerStyle(s => { if (actuel) delete s.w; else s.w = 1; });
+}
+
+function basculerCasse(valeur) {
+  const actuel = styleDe(E.coordVersRef(selection.l, selection.c)).tt;
+  appliquerStyle(s => { if (actuel === valeur) delete s.tt; else s.tt = valeur; });
+}
+
+const TAILLES_POLICE = [60, 70, 80, 90, 100, 115, 130, 150, 175, 200, 250, 300];
+function changerTaillePolice(sens) {
+  const actuelle = styleDe(E.coordVersRef(selection.l, selection.c)).fs || 100;
+  let i = TAILLES_POLICE.indexOf(actuelle);
+  if (i === -1) i = TAILLES_POLICE.indexOf(100);
+  i = Math.max(0, Math.min(TAILLES_POLICE.length - 1, i + sens));
+  const taille = TAILLES_POLICE[i];
+  appliquerStyle(s => { if (taille === 100) delete s.fs; else s.fs = taille; });
+}
+function reinitialiserTaillePolice() { appliquerStyle(s => { delete s.fs; }); }
+
+function definirFormatNombre(valeur) {
+  appliquerStyle(s => { if (valeur === 'standard') delete s.nf; else s.nf = valeur; });
+}
+function effacerMiseEnForme() {
+  modifier(() => parcourirSelection((ref, f) => {
+    if (f.cells[ref]) {
+      delete f.cells[ref].s;
+      if (f.cells[ref].v === '') delete f.cells[ref];
+    }
+  }));
+}
+
+/* ══════════ Saisie ══════════ */
+
+const champ = document.getElementById('formula-input');
+const editeur = document.getElementById('cell-editor');
+let editionEnCours = false;
+
+/* ── Saisie ──
+ *
+ * Deux entrées possibles, comme dans Excel, et toujours synchronisées :
+ *   - directement DANS la cellule (frappe, double-clic, F2) ;
+ *   - par la barre de formule en haut.
+ * Les deux écrivent dans la même cellule et se reflètent l'une l'autre.
+ */
+
+function positionnerEditeur() {
+  const wrap = document.getElementById('grid-wrap');
+  const td = wrap.querySelector(`td[data-l="${selection.l}"][data-c="${selection.c}"]`);
+  if (!td) return false;
+  const st = styleDe(E.coordVersRef(selection.l, selection.c));
+  editeur.style.left = td.offsetLeft + 'px';
+  editeur.style.top = td.offsetTop + 'px';
+  editeur.style.width = Math.max(td.offsetWidth, 110) + 'px';
+  editeur.style.minHeight = td.offsetHeight + 'px';
+  editeur.style.height = td.offsetHeight + 'px';
+  editeur.style.textAlign = st.a || 'left';
+  editeur.style.fontWeight = st.b ? '700' : '400';
+  editeur.style.fontStyle = st.i ? 'italic' : 'normal';
+  // Taille de police de la cellule ET zoom courant : l'éditeur doit avoir
+  // exactement l'allure de la cellule qu'il recouvre.
+  const zoom = parseFloat(getComputedStyle(wrap).getPropertyValue('--zoom')) || 1;
+  editeur.style.fontSize = (0.85 * zoom * ((st.fs || 100) / 100)) + 'rem';
+  return true;
+}
+
+function ajusterHauteurEditeur() {
+  editeur.style.height = 'auto';
+  editeur.style.height = Math.max(editeur.scrollHeight, parseInt(editeur.style.minHeight, 10) || 24) + 'px';
+}
+
+/**
+ * @param {string|null} valeurInitiale  '' = reprendre le contenu existant,
+ *        une chaîne = remplacer (frappe directe), null = idem ''.
+ * @param {boolean} dansLaBarre  true pour saisir dans la barre du haut.
+ */
+function demarrerEdition(valeurInitiale, dansLaBarre) {
+  const ref = E.coordVersRef(selection.l, selection.c);
+  const contenu = (valeurInitiale !== '' && valeurInitiale != null)
+    ? valeurInitiale : (valeurBrute(ref) ?? '');
+
+  if (dansLaBarre) {
+    editionEnCours = true;
+    champ.value = contenu;
+    champ.focus();
+    champ.setSelectionRange(champ.value.length, champ.value.length);
+    return;
+  }
+
+  if (!positionnerEditeur()) return;
+  editionEnCours = true;
+  editeur.value = contenu;
+  champ.value = contenu;
+  editeur.style.display = 'block';
+  ajusterHauteurEditeur();
+  editeur.focus();
+  editeur.setSelectionRange(editeur.value.length, editeur.value.length);
+}
+
+function fermerEditeur() {
+  editeur.style.display = 'none';
+  editionEnCours = false;
+}
+
+function validerEdition(valeur, dl, dc) {
+  const ref = E.coordVersRef(selection.l, selection.c);
+  fermerEditeur();
+  ecrireCellule(ref, valeur);
+  if (dl || dc) deplacer(dl, dc);
+}
+
+function annulerEdition() {
+  fermerEditeur();
+  majBarreFormule();
+  document.getElementById('grid-wrap').focus();
+}
+
+// Saisie dans la cellule
+editeur.addEventListener('input', () => {
+  champ.value = editeur.value;     // la barre du haut suit en direct
+  ajusterHauteurEditeur();
+});
+editeur.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.altKey) {
+    e.preventDefault();
+    validerEdition(editeur.value, e.shiftKey ? -1 : 1, 0);
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    validerEdition(editeur.value, 0, e.shiftKey ? -1 : 1);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    annulerEdition();
+  }
+  // Alt+Entrée insère un vrai saut de ligne, comme dans Excel.
+});
+editeur.addEventListener('blur', () => {
+  if (editionEnCours && editeur.style.display !== 'none') validerEdition(editeur.value, 0, 0);
+});
+
+// Saisie dans la barre de formule
+champ.addEventListener('focus', () => { editionEnCours = true; });
+champ.addEventListener('input', () => {
+  if (editeur.style.display !== 'none') editeur.value = champ.value;
+});
+champ.addEventListener('blur', () => {
+  if (editeur.style.display === 'none') editionEnCours = false;
+});
+champ.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    fermerEditeur();
+    ecrireCellule(E.coordVersRef(selection.l, selection.c), champ.value);
+    deplacer(1, 0);
+  } else if (e.key === 'Escape') {
+    annulerEdition();
+  }
+});
+
+function ecrireCellule(ref, valeur) {
+  modifier(() => {
+    const f = feuille();
+    const ancien = f.cells[ref];
+    if (valeur === '' || valeur === null || valeur === undefined) {
+      // On garde la mise en forme d'une cellule vidée de son contenu : effacer
+      // un chiffre ne doit pas faire disparaître la couleur de la ligne.
+      if (ancien && ancien.s) f.cells[ref] = { v: '', s: ancien.s };
+      else delete f.cells[ref];
+    } else {
+      f.cells[ref] = ancien && ancien.s ? { v: valeur, s: ancien.s } : { v: valeur };
+    }
+  });
+}
+
+function deplacer(dl, dc) {
+  const f = feuille();
+  selection.l = Math.max(0, Math.min(f.rows - 1, selection.l + dl));
+  selection.c = Math.max(0, Math.min(f.cols - 1, selection.c + dc));
+  selection.l2 = selection.l; selection.c2 = selection.c;
+  dessiner();
+  amenerDansLaVue();
+}
+
+/** Étend la sélection depuis l'ancre (Maj + flèches). */
+function etendre(dl, dc) {
+  const f = feuille();
+  selection.l2 = Math.max(0, Math.min(f.rows - 1, selection.l2 + dl));
+  selection.c2 = Math.max(0, Math.min(f.cols - 1, selection.c2 + dc));
+  majSurbrillance();
+  amenerDansLaVue(selection.l2, selection.c2);
+}
+
+/**
+ * Bord du bloc de données dans une direction (Ctrl + flèche), comme Excel :
+ * depuis une cellule pleine on va à la dernière cellule pleine de la série ;
+ * depuis une cellule vide on saute à la prochaine cellule pleine.
+ */
+function bordDeBloc(l, c, dl, dc) {
+  const f = feuille();
+  const rempli = (li, co) => {
+    const v = valeurBrute(E.coordVersRef(li, co));
+    return v !== '' && v !== null && v !== undefined;
+  };
+  let li = l, co = c;
+  const dansLaFeuille = (a, b) => a >= 0 && a < f.rows && b >= 0 && b < f.cols;
+  if (!dansLaFeuille(li + dl, co + dc)) return { l: li, c: co };
+
+  if (rempli(li, co) && rempli(li + dl, co + dc)) {
+    while (dansLaFeuille(li + dl, co + dc) && rempli(li + dl, co + dc)) { li += dl; co += dc; }
+  } else {
+    li += dl; co += dc;
+    while (dansLaFeuille(li + dl, co + dc) && !rempli(li, co)) { li += dl; co += dc; }
+  }
+  return { l: li, c: co };
+}
+
+/** Fait défiler juste ce qu'il faut pour que la cellule soit visible. */
+function amenerDansLaVue(ligne, colonne) {
+  const wrap = document.getElementById('grid-wrap');
+  const td = wrap.querySelector(`td[data-l="${ligne !== undefined ? ligne : selection.l}"][data-c="${colonne !== undefined ? colonne : selection.c}"]`);
+  if (!td) return;
+  const r = td.getBoundingClientRect();
+  const z = wrap.getBoundingClientRect();
+  // 48 px : la hauteur des en-têtes figés, qui recouvriraient sinon la cellule.
+  if (r.top < z.top + 30) wrap.scrollTop -= (z.top + 30 - r.top);
+  else if (r.bottom > z.bottom) wrap.scrollTop += (r.bottom - z.bottom);
+  if (r.left < z.left + 48) wrap.scrollLeft -= (z.left + 48 - r.left);
+  else if (r.right > z.right) wrap.scrollLeft += (r.right - z.right);
+}
+
+const DIRECTIONS = {
+  ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+};
+
+document.addEventListener('keydown', e => {
+  if (!classeur || document.getElementById('view-editor').style.display === 'none') return;
+  if (document.activeElement === champ || document.activeElement === editeur) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+  const ctrl = e.ctrlKey || e.metaKey;
+  const f = feuille();
+
+  // ── Déplacements, seuls ou combinés à Maj (étendre) et Ctrl (sauter) ──
+  if (DIRECTIONS[e.key]) {
+    const [dl, dc] = DIRECTIONS[e.key];
+    e.preventDefault();
+    if (ctrl) {
+      const cible = bordDeBloc(e.shiftKey ? selection.l2 : selection.l,
+                               e.shiftKey ? selection.c2 : selection.c, dl, dc);
+      if (e.shiftKey) { selection.l2 = cible.l; selection.c2 = cible.c; majSurbrillance(); amenerDansLaVue(cible.l, cible.c); }
+      else { selection = { l: cible.l, c: cible.c, l2: cible.l, c2: cible.c }; dessiner(); amenerDansLaVue(); }
+    } else if (e.shiftKey) {
+      etendre(dl, dc);
+    } else {
+      deplacer(dl, dc);
+    }
+    return;
+  }
+
+  if (ctrl) {
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); enregistrer(); }
+    else if (k === 'z') { e.preventDefault(); e.shiftKey ? retablir() : annuler(); }
+    else if (k === 'y') { e.preventDefault(); retablir(); }
+    else if (k === 'c') copierSelection();
+    else if (k === 'x') { copierSelection(); viderSelection(); }
+    else if (k === 'b') { e.preventDefault(); basculerStyle('b'); }
+    else if (k === 'i') { e.preventDefault(); basculerStyle('i'); }
+    else if (k === 'a') { e.preventDefault(); selection = { l: 0, c: 0, l2: f.rows - 1, c2: f.cols - 1 }; majSurbrillance(); }
+    else if (e.key === 'Home') { e.preventDefault(); selection = { l: 0, c: 0, l2: 0, c2: 0 }; dessiner(); amenerDansLaVue(); }
+    else if (e.key === 'End') {
+      e.preventDefault();
+      selection = { l: f.rows - 1, c: f.cols - 1, l2: f.rows - 1, c2: f.cols - 1 };
+      dessiner(); amenerDansLaVue();
+    }
+    return;
+  }
+
+  switch (e.key) {
+    case 'Tab':
+      e.preventDefault();
+      deplacer(0, e.shiftKey ? -1 : 1);
+      return;
+    case 'Enter':
+      e.preventDefault();
+      // Maj+Entrée remonte, comme dans un tableur.
+      if (e.shiftKey) deplacer(-1, 0); else demarrerEdition('');
+      return;
+    case 'F2':
+      e.preventDefault(); demarrerEdition(''); return;
+    case 'Home':
+      e.preventDefault();
+      if (e.shiftKey) { selection.c2 = 0; majSurbrillance(); }
+      else { selection = { l: selection.l, c: 0, l2: selection.l, c2: 0 }; dessiner(); amenerDansLaVue(); }
+      return;
+    case 'End':
+      e.preventDefault();
+      if (e.shiftKey) { selection.c2 = f.cols - 1; majSurbrillance(); }
+      else { selection = { l: selection.l, c: f.cols - 1, l2: selection.l, c2: f.cols - 1 }; dessiner(); amenerDansLaVue(); }
+      return;
+    case 'PageDown': e.preventDefault(); deplacer(15, 0); return;
+    case 'PageUp': e.preventDefault(); deplacer(-15, 0); return;
+    case 'Delete':
+    case 'Backspace': e.preventDefault(); viderSelection(); return;
+    case 'Escape': return;
+  }
+
+  if (e.key === ' ' && e.shiftKey) {   // Maj+Espace : toute la ligne
+    e.preventDefault();
+    selection = { l: selection.l, c: 0, l2: selection.l, c2: f.cols - 1 };
+    majSurbrillance(); return;
+  }
+
+  if (e.key.length === 1 && !e.altKey) { demarrerEdition(e.key); e.preventDefault(); }
+});
+
+/* ══════════ Fusion ══════════ */
+
+function fusionner() {
+  const s = normSel();
+  if (s.l1 === s.l2 && s.c1 === s.c2) { showError('Sélectionne au moins deux cellules à fusionner.'); return; }
+  clearError();
+  modifier(() => {
+    const f = feuille();
+    f.merges = f.merges.filter(m =>
+      m.l + m.rs <= s.l1 || m.l > s.l2 || m.c + m.cs <= s.c1 || m.c > s.c2);
+    f.merges.push({ l: s.l1, c: s.c1, rs: s.l2 - s.l1 + 1, cs: s.c2 - s.c1 + 1 });
+    // Seule la cellule en haut à gauche garde son contenu — comme Excel.
+    // Conserver le reste créerait des données invisibles, donc fausses.
+    for (let l = s.l1; l <= s.l2; l++) {
+      for (let c = s.c1; c <= s.c2; c++) {
+        if (l === s.l1 && c === s.c1) continue;
+        delete f.cells[E.coordVersRef(l, c)];
+      }
+    }
+  });
+}
+
+function defusionner() {
+  const s = normSel();
+  const f = feuille();
+  const avant = f.merges.length;
+  const restantes = f.merges.filter(m =>
+    m.l + m.rs <= s.l1 || m.l > s.l2 || m.c + m.cs <= s.c1 || m.c > s.c2);
+  if (restantes.length === avant) { showError('Aucune cellule fusionnée dans la sélection.'); return; }
+  clearError();
+  modifier(() => { feuille().merges = restantes; });
+}
+
+/* ══════════ Copier / coller ══════════ */
+
+function texteDeSelection() {
+  const s = normSel();
+  const lignes = [];
+  for (let l = s.l1; l <= s.l2; l++) {
+    const cols = [];
+    for (let c = s.c1; c <= s.c2; c++) {
+      // On copie la valeur AFFICHÉE, pas la formule : c'est ce qu'attend
+      // quelqu'un qui colle dans Excel ou dans un courriel.
+      const ref = E.coordVersRef(l, c);
+      cols.push(E.afficherAvecFormat(valeurCalculee(ref), styleDe(ref).nf || 'standard'));
+    }
+    lignes.push(cols.join('\t'));
+  }
+  return lignes.join('\n');
+}
+
+function copierSelection() {
+  const s = normSel();
+  presse = [];
+  for (let l = s.l1; l <= s.l2; l++) {
+    const ligne = [];
+    for (let c = s.c1; c <= s.c2; c++) {
+      const cell = cellule(E.coordVersRef(l, c));
+      ligne.push(cell ? { ...cell } : null);
+    }
+    presse.push(ligne);
+  }
+  presse.origine = { l: s.l1, c: s.c1 };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texteDeSelection()).catch(() => {});
+  }
+}
+
+function collerInterne() {
+  if (!presse) return false;
+  const f = feuille();
+  const depart = { l: selection.l, c: selection.c };
+  modifier(() => {
+    presse.forEach((ligne, dl) => {
+      ligne.forEach((cell, dc) => {
+        const l = depart.l + dl, c = depart.c + dc;
+        if (l >= f.rows || c >= f.cols) return;
+        const ref = E.coordVersRef(l, c);
+        if (!cell) { delete f.cells[ref]; return; }
+        let valeur = cell.v;
+        // Un copier-coller interne décale les références, comme une recopie.
+        if (typeof valeur === 'string' && valeur.startsWith('=')) {
+          valeur = '=' + E.translaterReferences(valeur.slice(1),
+            l - (presse.origine.l + dl), c - (presse.origine.c + dc), f.rows - 1, f.cols - 1);
+        }
+        f.cells[ref] = cell.s ? { v: valeur, s: { ...cell.s } } : { v: valeur };
+      });
+    });
+    selection.l2 = Math.min(f.rows - 1, depart.l + presse.length - 1);
+    selection.c2 = Math.min(f.cols - 1, depart.c + presse[0].length - 1);
+  });
+  return true;
+}
+
+function collerTexte(texte) {
+  const lignes = texte.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  if (lignes.length && lignes[lignes.length - 1] === '') lignes.pop();
+  const f = feuille();
+  const depart = { l: selection.l, c: selection.c };
+  let maxL = depart.l, maxC = depart.c;
+
+  modifier(() => {
+    lignes.forEach((ligne, dl) => {
+      ligne.split('\t').forEach((valeur, dc) => {
+        const l = depart.l + dl, c = depart.c + dc;
+        if (l >= f.rows || c >= f.cols) return;
+        const ref = E.coordVersRef(l, c);
+        const ancien = f.cells[ref];
+        if (valeur === '') { if (ancien && ancien.s) f.cells[ref] = { v: '', s: ancien.s }; else delete f.cells[ref]; }
+        else f.cells[ref] = ancien && ancien.s ? { v: valeur, s: ancien.s } : { v: valeur };
+        maxL = Math.max(maxL, l); maxC = Math.max(maxC, c);
+      });
+    });
+    selection = { l: depart.l, c: depart.c, l2: maxL, c2: maxC };
+  });
+}
+
+document.addEventListener('paste', e => {
+  if (!classeur || document.getElementById('view-editor').style.display === 'none') return;
+  if (document.activeElement === champ || document.activeElement === editeur) return;
+  const texte = (e.clipboardData || window.clipboardData).getData('text');
+  // Un collage venu d'ailleurs (Excel) prime sur la copie interne : c'est le
+  // contenu que l'utilisateur vient effectivement de copier.
+  if (texte && (!presse || texte !== texteDeSelection())) { collerTexte(texte); e.preventDefault(); return; }
+  if (collerInterne()) e.preventDefault();
+});
+
+async function collerDepuisPressePapier() {
+  try {
+    const texte = await navigator.clipboard.readText();
+    if (texte && (!presse || texte !== texteDeSelection())) { collerTexte(texte); return; }
+  } catch (err) { /* refusé par le navigateur : on utilise la copie interne */ }
+  if (!collerInterne()) showError('Rien à coller. Utilise Ctrl+V, toujours autorisé par le navigateur.');
+}
+
+function viderSelection() {
+  modifier(() => parcourirSelection((ref, f) => {
+    const ancien = f.cells[ref];
+    if (ancien && ancien.s) f.cells[ref] = { v: '', s: ancien.s };
+    else delete f.cells[ref];
+  }));
+}
+
+/* ══════════ Lignes et colonnes ══════════ */
+
+// Les opérations de décalage et de recopie vivent dans le moteur
+// (tableur_engine.js) : ce sont des transformations de données, pas de
+// l'affichage, et c'est là qu'elles peuvent être vérifiées automatiquement.
+function decalerFeuille(axe, depuis, delta) {
+  E.decalerContenuFeuille(feuille(), axe, depuis, delta);
+}
+
+function insererLigne() { modifier(() => decalerFeuille('ligne', selection.l, 1)); }
+function insererColonne() { modifier(() => decalerFeuille('colonne', selection.c, 1)); }
+function supprimerLigne() {
+  if (feuille().rows <= 1) return;
+  modifier(() => {
+    decalerFeuille('ligne', selection.l, -1);
+    selection.l = Math.min(selection.l, feuille().rows - 1); selection.l2 = selection.l;
+  });
+}
+function supprimerColonne() {
+  if (feuille().cols <= 1) return;
+  modifier(() => {
+    decalerFeuille('colonne', selection.c, -1);
+    selection.c = Math.min(selection.c, feuille().cols - 1); selection.c2 = selection.c;
+  });
+}
+
+/* ══════════ Feuilles ══════════ */
+
+function dessinerOnglets() {
+  document.getElementById('sheet-tabs').innerHTML =
+    classeur.content.sheets.map((sh, i) =>
+      `<button type="button" class="sheet-tab ${i === feuilleIndex ? 'active' : ''}" onclick="changerFeuille(${i})" ondblclick="renommerFeuille(${i})" title="Double-clic pour renommer">${echapper(sh.name)}</button>`
+    ).join('') + `
+    <button type="button" class="tb-btn" onclick="ajouterFeuille()">+ Feuille</button>
+    <button type="button" class="tb-btn" onclick="renommerFeuille()">✏️ Renommer la feuille</button>
+    <button type="button" class="tb-btn" onclick="supprimerFeuille()" style="color:#B91C1C;">🗑</button>`;
+}
+
+function changerFeuille(i) {
+  feuilleIndex = i;
+  selection = { l: 0, c: 0, l2: 0, c2: 0 };
+  dessinerOnglets(); dessiner();
+}
+function ajouterFeuille() {
+  const saisi = prompt('Nom de la feuille :', `Feuille ${classeur.content.sheets.length + 1}`);
+  if (saisi === null) return;
+  const nom = saisi.trim();
+  if (!nom) { showError('Le nom de la feuille ne peut pas être vide.'); return; }
+  if (SIGNES_INTERDITS_FEUILLE.some(c => nom.includes(c)) || nom.length > LONGUEUR_MAX_FEUILLE) {
+    showError(`Nom refusé par Excel : pas de ${SIGNES_INTERDITS_FEUILLE.join(' ')} et ${LONGUEUR_MAX_FEUILLE} caractères maximum.`);
+    return;
+  }
+  if (classeur.content.sheets.some(sh => sh.name.toLowerCase() === nom.toLowerCase())) {
+    showError(`Une feuille s'appelle déjà « ${nom} ».`);
+    return;
+  }
+  clearError();
+  modifier(() => {
+    classeur.content.sheets.push(feuilleVide(nom));
+    feuilleIndex = classeur.content.sheets.length - 1;
+  });
+  dessinerOnglets();
+}
+// Caractères qu'Excel refuse dans un nom d'onglet, et sa limite de
+// longueur. On prévient ici plutôt que de laisser l'export les corriger en
+// silence : l'utilisateur verrait sinon un nom différent dans le fichier
+// téléchargé, sans comprendre pourquoi.
+const SIGNES_INTERDITS_FEUILLE = ['/', '*', '?', ':', '[', ']', String.fromCharCode(92)];   // 92 = barre oblique inverse
+const LONGUEUR_MAX_FEUILLE = 31;
+
+function renommerFeuille(index) {
+  const i = (index === undefined) ? feuilleIndex : index;
+  const actuelle = classeur.content.sheets[i];
+  if (!actuelle) return;
+
+  const saisi = prompt('Nouveau nom de la feuille :', actuelle.name);
+  if (saisi === null) return;
+  const nom = saisi.trim();
+  if (!nom) { showError('Le nom de la feuille ne peut pas être vide.'); return; }
+
+  const signe = SIGNES_INTERDITS_FEUILLE.find(c => nom.includes(c));
+  if (signe) {
+    showError(`Excel refuse le caractère « ${signe} » dans un nom de feuille. Choisis un autre nom.`);
+    return;
+  }
+  if (nom.length > LONGUEUR_MAX_FEUILLE) {
+    showError(`Excel limite les noms de feuille à ${LONGUEUR_MAX_FEUILLE} caractères (celui-ci en fait ${nom.length}).`);
+    return;
+  }
+  // Deux feuilles de même nom sont refusées par Excel, et rendraient les
+  // onglets impossibles à distinguer ici.
+  const doublon = classeur.content.sheets.some((sh, j) => j !== i && sh.name.toLowerCase() === nom.toLowerCase());
+  if (doublon) { showError(`Une autre feuille s'appelle déjà « ${nom} ».`); return; }
+
+  clearError();
+  modifier(() => { classeur.content.sheets[i].name = nom; });
+  dessinerOnglets();
+}
+function supprimerFeuille() {
+  if (classeur.content.sheets.length === 1) { showError('Un classeur doit garder au moins une feuille.'); return; }
+  if (!confirm(`Supprimer la feuille « ${feuille().name} » et tout son contenu ?`)) return;
+  modifier(() => { classeur.content.sheets.splice(feuilleIndex, 1); feuilleIndex = 0; });
+  dessinerOnglets();
+}
+
+/* ══════════ Enregistrement ══════════ */
+
+async function enregistrer() {
+  if (!classeur || !modifie) return;
+  clearTimeout(minuterieEnregistrement);
+  const etat = document.getElementById('save-state');
+  etat.textContent = 'Enregistrement…';
+
+  const res = await fetch(`/api/workbooks/${classeur.id}`, {
+    method: 'PUT', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: classeur.content }),
+  });
+  if (!res.ok) {
+    showError(extractApiError(await res.json().catch(() => ({})), 'Enregistrement impossible.'));
+    etat.textContent = 'Non enregistré'; etat.classList.add('unsaved');
+    return;
+  }
+  clearError();
+  modifie = false;
+  etatEnregistre();
+}
+
+async function telechargerExcel() {
+  // On enregistre d'abord : sans ça, le fichier téléchargé ne contiendrait
+  // pas les dernières modifications encore en mémoire dans le navigateur.
+  if (modifie) await enregistrer();
+  window.open(`/api/workbooks/${classeur.id}/export`, '_blank');
+}
+
+async function renommerClasseur() {
+  const nom = prompt('Nouveau nom du classeur :', classeur.title);
+  if (!nom || !nom.trim()) return;
+  const res = await fetch(`/api/workbooks/${classeur.id}`, {
+    method: 'PUT', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: nom.trim() }),
+  });
+  if (!res.ok) { showError('Renommage impossible.'); return; }
+  classeur.title = nom.trim();
+  document.getElementById('wb-title').textContent = classeur.title;
+}
+
+// Dernier filet : l'enregistrement automatique a pu ne pas encore se
+// déclencher au moment où la page se ferme.
+window.addEventListener('beforeunload', e => {
+  if (modifie) { e.preventDefault(); e.returnValue = ''; }
+});
+</script>
+</body>
+</html>

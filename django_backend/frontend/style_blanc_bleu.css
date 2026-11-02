@@ -1,0 +1,523 @@
+/* ==========================================================================
+   Clinique App — thème « blanc et bleu »
+   Phase A : alignement sur le système de design issu de Stitch.
+
+   Couche posée PAR-DESSUS style.css et par-dessus le style local de chaque
+   page. Elle ne retire rien : retirer la ligne <link> des pages suffit à
+   revenir à l'apparence précédente.
+
+   PRINCIPE : tout est blanc sur blanc, et c'est le TRAIT qui sépare, pas
+   l'ombre. Conséquence assumée — une carte blanche est invisible sans
+   contour, donc le trait porte toute la structure et les ombres sont
+   coupées. Garder les deux ferait deux fois la même information.
+
+   CE QUI VIENT DE STITCH : la palette ardoise + bleu, les arrondis resserrés
+   (4 px pour les contrôles, 8 px pour les cartes), l'interdiction des formes
+   en pilule, les lignes de tableau à 48 px, les contours bleu-gris calmes
+   qui laissent ressortir les couleurs de statut.
+
+   CE QUI A ÉTÉ CORRIGÉ : les couleurs de pastilles de Stitch échouaient au
+   contraste sur leurs propres fonds teintés (3,00 / 2,86 / 3,95 pour 4,5
+   exigés) alors que son document affirme dépasser 7:1 — mesuré et corrigé
+   ci-dessous. C'est exactement ce qui disparaît en plein soleil, l'inverse
+   du but recherché.
+   ========================================================================== */
+
+:root {
+  /* ---- Surfaces ---------------------------------------------------------- */
+  --bg: #FFFFFF;                 /* blanc absolu : réflectance maximale au soleil */
+  --surface: #FFFFFF;
+  --surface-muted: #F8FAFC;      /* creux : en-tête de tableau clair, survol */
+  --bleu-pale: #EFF4FF;          /* aplat d'état actif */
+
+  /* ---- Traits ------------------------------------------------------------
+     Trois épaisseurs, parce qu'un trait unique ne peut pas à la fois séparer
+     deux lignes d'un tableau et délimiter une carte. */
+  --ligne: #E2E8F0;              /* séparateur de lignes, discret */
+  --ligne-cadre: #CBD5E1;        /* contour de carte (valeur Stitch) */
+  --ligne-forte: #94A3B8;        /* ce qui doit rester visible dehors */
+  --ligne-active: #93C5FD;       /* élément survolé ou sélectionné */
+
+  /* ---- Bleu d'action -----------------------------------------------------
+     Une seule teinte de fond bleue dans toute l'application, réservée à
+     l'action principale. 6,70:1 avec du texte blanc. */
+  --primary: #1D4ED8;
+  --primary-dark: #1E40AF;       /* survol — 8,72:1 */
+  --primary-soft: #EFF4FF;
+  --focus: #2563EB;
+
+  /* ---- Encre -------------------------------------------------------------
+     Échelle ardoise. Tout dépasse largement le seuil : 17,9 / 14,6 / 10,4 /
+     4,8 pour 1 sur blanc. */
+  --entete: #1E293B;             /* fond des en-têtes de tableau, 14,6:1 en blanc */
+  --ink: #0F172A;                /* titres et données clés */
+  --ink-muted: #334155;          /* texte courant */
+  --ink-faint: #64748B;          /* libellés secondaires, unités */
+
+  --border: var(--ligne-cadre);
+  --border-strong: var(--ligne-forte);
+  --filet: var(--ligne);
+
+  /* Profondeur zéro par l'ombre : les variables restent définies pour que
+     rien ne casse là où elles sont encore appelées. */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* ---- Formes ------------------------------------------------------------
+     « Les formes en pilule complète à 9999px sont formellement proscrites
+     pour préserver le sérieux médical. » Nos pastilles et l'indicateur
+     « EN LIGNE » en étaient : ils passent à 4 px plus bas. */
+  --radius-sm: 4px;              /* boutons, champs, pastilles */
+  --radius-md: 8px;              /* cartes, tableaux, panneaux */
+  --radius-lg: 8px;              /* fenêtres */
+
+  --cible-tactile: 44px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink-muted);
+}
+
+/* ==========================================================================
+   Typographie — échelle Stitch, en valeurs rondes
+   ========================================================================== */
+
+h1 { font-size: 1.875rem; font-weight: 700; line-height: 1.27; letter-spacing: -0.02em;  color: var(--ink); }
+h2 { font-size: 1.5rem;   font-weight: 600; line-height: 1.33; letter-spacing: -0.015em; color: var(--ink); }
+h3 { font-size: 1.25rem;  font-weight: 600; line-height: 1.4;  letter-spacing: -0.01em;  color: var(--ink); }
+
+.breadcrumb {
+  font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--ink-faint); margin-bottom: var(--space-2);
+}
+
+/* Le titre de section porte son propre trait : il annonce le bloc qui suit
+   au lieu de flotter au-dessus de lui. */
+h2 {
+  margin: var(--space-7) 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--ligne-cadre);
+}
+
+label {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+/* Chiffres à chasse fixe partout où il y a des données : sans cela les
+   colonnes de nombres ne s'alignent pas et les compteurs sautillent quand la
+   valeur change. */
+.mono, .counter-value, .stat-box .val, table.data-table td, .data-table td,
+.projects-count, .pagination {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Barre latérale
+   ========================================================================== */
+
+.app-sidebar {
+  background: var(--bg);
+  border-right: 1px solid var(--ligne-cadre);
+  box-shadow: none;
+  padding: var(--space-5) var(--space-3);
+}
+.app-sidebar .brand {
+  color: var(--primary);
+  font-size: 1.25rem; letter-spacing: -0.02em;
+  padding: 0 var(--space-3); margin-bottom: var(--space-5);
+}
+.app-sidebar .brand svg { color: var(--primary); }
+
+.app-sidebar .nav-section-label,
+.app-sidebar .nav-section-toggle {
+  color: var(--ink-faint);
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.03em;
+}
+
+.app-sidebar .nav-link {
+  position: relative;
+  padding: var(--space-3);
+  margin-bottom: 2px;
+  border: 1px solid transparent;   /* réservé : pas de décalage au survol */
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+.app-sidebar .nav-link:hover {
+  background: var(--surface-muted);
+  border-color: var(--ligne);
+  color: var(--ink);
+}
+.app-sidebar .nav-link.active {
+  background: var(--bleu-pale);
+  border-color: var(--ligne-active);
+  color: var(--primary);
+  font-weight: 600;
+}
+.app-sidebar .nav-link svg { color: var(--ink-faint); }
+.app-sidebar .nav-link.active svg, .app-sidebar .nav-link:hover svg { color: var(--primary); }
+
+.app-sidebar .user-box {
+  border-top: 1px solid var(--ligne);
+  padding: var(--space-4) var(--space-3) 0;
+}
+.app-sidebar .user-box .user-name { color: var(--ink); font-size: 0.875rem; }
+.app-sidebar .user-box button {
+  background: var(--bg); color: var(--ink-muted);
+  border: 1px solid var(--ligne-cadre); border-radius: var(--radius-sm);
+  padding: var(--space-3); font-size: 0.875rem;
+}
+.app-sidebar .user-box button:hover { background: var(--surface-muted); border-color: var(--ligne-active); color: var(--ink); }
+
+/* Indicateur de synchronisation : pastille de 8 px + libellé. Plus de forme
+   en pilule. C'est un composant critique pour le travail hors réseau, il doit
+   se lire sans ambiguïté. */
+.online-indicator {
+  margin: 0 var(--space-3) var(--space-5);
+  border: 1px solid; border-radius: var(--radius-sm);
+  font-size: 0.6875rem; letter-spacing: 0.03em;
+  padding: var(--space-2) var(--space-3);
+}
+.online-indicator::before { width: 8px; height: 8px; }
+.online-indicator.is-online  { background: #DCFCE7; color: #15803D; border-color: #86EFAC; }
+.online-indicator.is-offline { background: #FEF3C7; color: #B45309; border-color: #FDE68A; }
+
+/* ==========================================================================
+   Contenu
+   ========================================================================== */
+
+.app-main { padding: var(--space-6) var(--space-7) var(--space-8); }
+
+/* ---- Barre supérieure ----------------------------------------------------
+   Insérée par app_shell.js en tête de .app-main, donc à l'intérieur de son
+   rembourrage. Les marges négatives l'en sortent pour qu'elle aille d'un bord
+   à l'autre — une barre qui s'arrête avant le bord a l'air d'une erreur.
+   Elles reprennent exactement les valeurs du rembourrage ci-dessus : si l'une
+   change, les autres doivent suivre. */
+.app-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-4);
+  height: 64px; padding: 0 var(--space-7);
+  margin: calc(var(--space-6) * -1) calc(var(--space-7) * -1) var(--space-5);
+  background: var(--bg);
+  border-bottom: 1px solid var(--ligne-cadre);
+}
+.topbar-contexte { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.topbar-pastille { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.topbar-lieu {
+  font-size: 0.875rem; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.topbar-actions { display: flex; align-items: center; gap: var(--space-4); flex-shrink: 0; }
+/* L'indicateur perd ses marges de barre latérale une fois remonté ici. */
+.app-topbar .online-indicator { margin: 0; }
+.topbar-user { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.topbar-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--primary); color: #FFFFFF;
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.02em;
+}
+.topbar-nom {
+  font-size: 0.875rem; color: var(--ink-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+}
+/* Sur téléphone, le nom disparaît : les initiales suffisent, et la place
+   revient à l'état de connexion, qui compte davantage sur le terrain. */
+@media (max-width: 760px) {
+  .app-topbar {
+    height: auto; padding: var(--space-3) var(--space-4);
+    margin: calc(var(--space-5) * -1) calc(var(--space-4) * -1) var(--space-4);
+  }
+  .topbar-nom { display: none; }
+}
+
+/* ---- Cartes : fond blanc ceinturé d'un trait, jamais d'ombre ------------- */
+
+.card, .settings-section, .chart-box, .form-list-card, .quick-link,
+.stat-box, .hub-info, .module-card, .counter-card {
+  background: var(--bg);
+  border: 1px solid var(--ligne-cadre);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+.card { padding: var(--space-5); margin-bottom: var(--space-5); }
+.card-clickable:hover, .quick-link:hover, .stat-box:hover, .module-card:hover {
+  background: var(--surface-muted);
+  border-color: var(--ligne-active);
+  transform: none;                 /* plus d'ombre, donc plus de soulèvement */
+}
+
+/* ---- Compteurs ---------------------------------------------------------- */
+
+.counter-grid { gap: var(--space-4); margin-bottom: var(--space-6); }
+/* Libellé AU-DESSUS du chiffre, comme chez Stitch : on lit d'abord de quoi on
+   parle, puis la valeur. L'inverse oblige à revenir en arrière.
+   Obtenu par `column-reverse` plutôt qu'en réécrivant le HTML de chaque page :
+   l'ordre du code reste « valeur puis libellé », donc rien à changer côté
+   pages, et un lecteur d'écran annonce toujours la valeur avec son libellé. */
+.counter-card {
+  position: relative; overflow: hidden; text-align: left;
+  padding: var(--space-5);
+  display: flex; flex-direction: column-reverse; justify-content: flex-end;
+  gap: var(--space-2);
+}
+/* La couleur de statut porte une information médicale : elle ne peut pas être
+   rabattue sur le bleu de l'habillage. Elle tient dans un trait en haut de la
+   vignette, pas dans le chiffre — trois chiffres colorés côte à côte, aucun
+   ne ressortirait. */
+.counter-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--ligne-forte);
+}
+.counter-card.active::before  { background: #15803D; }
+.counter-card.overdue::before { background: #B45309; }
+.counter-card.alert::before   { background: #B91C1C; }
+.counter-card.closed::before  { background: #475569; }
+
+.counter-value, .stat-box .val {
+  font-size: 1.75rem; font-weight: 700; line-height: 1.14;
+  letter-spacing: -0.02em; color: var(--ink);
+}
+.counter-card.active .counter-value, .counter-card.overdue .counter-value,
+.counter-card.alert .counter-value,  .counter-card.closed .counter-value { color: var(--ink); }
+
+.counter-label, .stat-box .lbl {
+  font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--ink-faint); margin-top: 0;
+}
+/* Le chiffre vient en second dans le flux visuel (column-reverse) : il doit
+   donc pousser vers le bas, sinon libellé et valeur se collent en haut d'une
+   vignette plus haute que son contenu. */
+.counter-value { margin-top: auto; }
+
+/* ==========================================================================
+   Tableaux de données
+   ========================================================================== */
+
+table.data-table, .data-table {
+  border: 1px solid var(--ligne-cadre);
+  border-radius: var(--radius-md);
+  border-collapse: separate; border-spacing: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+/* En-tête en aplat ardoise foncé, texte blanc : c'est le point le plus sombre
+   de la page. Le document de Stitch décrit un en-tête CLAIR (#F8FAFC) mais sa
+   propre maquette en montre un foncé — contradiction interne, et le foncé est
+   ce qui empêche la ligne des titres de se confondre avec la première ligne
+   de données. */
+table.data-table th, .data-table th {
+  background: var(--entete);
+  color: #FFFFFF;
+  font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: none;
+}
+table.data-table td, .data-table td {
+  padding: var(--space-3) var(--space-4);
+  height: 48px; vertical-align: middle;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--ligne);
+}
+table.data-table tbody tr:last-child td,
+.data-table tbody tr:last-child td { border-bottom: none; }
+/* Plus de zébrage : il ajoutait un troisième gris dans un tableau qui n'a
+   plus besoin que d'un trait pour se lire. La teinte est gardée pour le
+   survol, où elle veut dire quelque chose. */
+table.data-table tbody tr:nth-child(even),
+.data-table tbody tr:nth-child(even) { background: transparent; }
+table.data-table tr:hover td, .data-table tr:hover td { background: var(--surface-muted); }
+
+/* ---- Lignes teintées selon l'état du dossier -----------------------------
+   Un retard se repère alors sans lire la colonne Statut, ce qui compte quand
+   vingt lignes sont à l'écran. Les teintes sont très pâles à dessein : elles
+   doivent se remarquer du coin de l'œil sans gêner la lecture du texte, qui
+   reste sur `--ink-muted` (10,4:1) dans tous les cas.
+   Le point de couleur devant le numéro porte la même information par la
+   FORME : elle survit ainsi au daltonisme et à la lumière rasante. */
+tr.ligne-retard td { background: #FFFBEB; }
+tr.ligne-perdu  td { background: #F8FAFC; }
+tr.ligne-clos   td { color: var(--ink-faint); }
+
+.point-etat {
+  display: inline-block; vertical-align: middle;
+  width: 7px; height: 7px; border-radius: 50%;
+  margin-right: var(--space-2); flex-shrink: 0;
+  background: #15803D;                      /* actif par défaut */
+}
+tr.ligne-retard .point-etat { background: #B45309; }
+tr.ligne-perdu  .point-etat { background: #B91C1C; }
+tr.ligne-clos   .point-etat { background: #94A3B8; }
+
+/* Le survol doit rester perceptible SUR une ligne déjà teintée : sans cette
+   règle, pointer une ligne en retard ne produisait plus aucun retour. */
+tr.ligne-retard:hover td { background: #FEF3C7; }
+tr.ligne-perdu:hover  td { background: #EEF2F6; }
+
+/* L'ancienneté à côté de la date : volontairement en retrait, c'est un
+   complément de lecture, pas la donnée elle-même. */
+.age-relatif { color: var(--ink-faint); font-size: 0.8125rem; }
+
+/* Un tableau posé dans une carte portait DEUX cadres emboîtés : celui de la
+   carte et le sien. Défaut repéré sur capture d'écran — invisible en lisant le
+   code, chaque règle étant correcte isolément. La carte cède son cadre au
+   tableau, qui va d'un bord à l'autre. */
+.card:has(> table.data-table), .card:has(> .data-table) {
+  padding: 0; border: none; overflow: hidden;
+}
+/* Repli pour les navigateurs sans :has() (Android ancien du terrain). */
+.card > table.data-table, .card > .data-table { border: none; }
+
+.pagination button {
+  background: var(--bg); border: 1px solid var(--ligne-cadre);
+  border-radius: var(--radius-sm); color: var(--ink-muted);
+  padding: var(--space-2) var(--space-4);
+}
+.pagination button:hover:not(:disabled) { background: var(--surface-muted); border-color: var(--ligne-active); }
+
+/* ==========================================================================
+   Pastilles de statut
+   ==========================================================================
+   Fond teinté + trait + MAJUSCULES, en rectangle à 4 px (pas en pilule).
+   Les teintes de texte ne sont PAS celles de Stitch : les siennes donnaient
+   3,00 / 2,86 / 3,95 pour 1 sur ses propres fonds, sous le seuil de 4,5.
+   Assombries ici à 4,57 / 4,51 / 5,30. */
+
+.status-badge, .badge {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 3px var(--space-2);
+  font-size: 0.6875rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  border: 1px solid; border-radius: var(--radius-sm);
+}
+/* Le point porte l'information par la forme autant que par la teinte : elle
+   survit ainsi au daltonisme et à la lumière rasante. */
+.status-badge::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex-shrink: 0;
+}
+.status-active  { background: #DCFCE7; color: #15803D; border-color: #86EFAC; }
+.status-overdue { background: #FEF3C7; color: #B45309; border-color: #FDE68A; }
+.status-alert   { background: #FEE2E2; color: #B91C1C; border-color: #FCA5A5; }
+.status-closed  { background: #F1F5F9; color: #475569; border-color: #CBD5E1; }
+.status-lost    { background: #F1F5F9; color: #334155; border-color: #CBD5E1; }
+
+.stat-pill {
+  background: var(--surface-muted); color: var(--ink-muted);
+  border: 1px solid var(--ligne); border-radius: var(--radius-sm);
+  font-size: 0.6875rem; padding: 3px var(--space-2);
+}
+
+/* ==========================================================================
+   Boutons
+   ========================================================================== */
+
+.btn {
+  height: var(--cible-tactile);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem; font-weight: 600; letter-spacing: 0.01em;
+}
+/* Une seule teinte de fond bleue dans toute l'application. */
+.btn-primary { background: var(--primary); color: #FFFFFF; border: 1px solid var(--primary); box-shadow: none; }
+.btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+
+.btn-secondary { background: var(--bg); color: var(--ink); border: 1px solid var(--ligne-cadre); }
+.btn-secondary:hover { background: var(--surface-muted); border-color: var(--ligne-active); }
+
+.btn-ghost { background: var(--bg); color: var(--ink-muted); border: 1px solid var(--ligne-cadre); }
+.btn-ghost:hover { background: var(--surface-muted); border-color: var(--ligne-active); color: var(--ink); }
+
+/* Action destructrice : contour rouge sur fond blanc. Un aplat rouge plein
+   attire l'œil en permanence sur l'action qu'on souhaite le moins. */
+.btn-danger {
+  background: var(--bg); color: #B91C1C; border: 1px solid #DC2626;
+}
+.btn-danger:hover { background: #FEE2E2; border-color: #B91C1C; }
+
+.btn-sm { height: 36px; padding: 0 var(--space-3); font-size: 0.8125rem; }
+@media (pointer: coarse) { .btn-sm { min-height: var(--cible-tactile); } }
+
+/* ==========================================================================
+   Champs de saisie
+   ========================================================================== */
+
+input[type="text"], input[type="email"], input[type="password"], input[type="date"],
+input[type="number"], input[type="tel"], input[type="search"], select, textarea {
+  min-height: var(--cible-tactile);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--ligne-cadre);
+  border-radius: var(--radius-sm);
+}
+textarea { min-height: auto; }
+/* Trait de focus de 2 px « sans halo diffus ». Posé en outline plutôt qu'en
+   bordure : la bordure changerait d'épaisseur et décalerait le contenu d'un
+   pixel à chaque entrée dans un champ. */
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-color: var(--focus);
+  box-shadow: none;
+}
+
+/* ==========================================================================
+   Bandeaux d'alerte
+   ==========================================================================
+   Les sévérités gardent leur couleur conventionnelle : un bandeau rouge doit
+   rester rouge, c'est une information de sécurité, pas un choix d'habillage.
+   Les teintes de texte sont celles corrigées plus haut. */
+
+.alert-banner {
+  border: 1px solid; border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  font-size: 0.875rem;
+}
+.severity-low      { background: #EFF4FF; color: #1E40AF; border-color: #BFD3FE; }
+.severity-medium   { background: #FEF3C7; color: #B45309; border-color: #FDE68A; }
+.severity-high     { background: #FEE2E2; color: #B91C1C; border-color: #FCA5A5; }
+.severity-critical { background: #FEE2E2; color: #B91C1C; border-color: #FCA5A5; font-weight: 700; }
+
+/* ==========================================================================
+   Divers composants partagés
+   ========================================================================== */
+
+.module-card { padding: var(--space-6); }
+.module-title { font-size: 1.25rem; letter-spacing: -0.01em; color: var(--ink); }
+.module-desc { font-size: 0.875rem; color: var(--ink-muted); }
+.module-btn {
+  height: var(--cible-tactile); padding: 0 var(--space-5);
+  border-radius: var(--radius-sm); font-size: 0.875rem;
+}
+
+.tab-btn { font-size: 0.875rem; color: var(--ink-faint); }
+.tab-btn.active { color: var(--ink); border-bottom-color: var(--primary); }
+.tab-bar { border-bottom-color: var(--ligne-cadre); }
+
+.empty-state { color: var(--ink-faint); }
+.danger-zone { border: 1px solid #FCA5A5; background: #FEF2F2; box-shadow: none; }
+.danger-zone h3 { color: #B91C1C; }
+
+/* ==========================================================================
+   Téléphone
+   ========================================================================== */
+
+@media (max-width: 760px) {
+  .app-sidebar { border-right: none; border-bottom: 1px solid var(--ligne-cadre); }
+  .app-main { padding: var(--space-5) var(--space-4) var(--space-7); }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+}

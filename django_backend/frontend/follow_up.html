@@ -100,6 +100,11 @@
     border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 10px;
   }
 </style>
+  <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
+       le theme l'emporte sur les reglages locaux herites de l'ancienne
+       charte. Retirer cette ligne suffit a revenir a l'apparence
+       precedente : aucune autre modification n'a ete faite. -->
+  <link rel="stylesheet" href="/style_blanc_bleu.css">
 </head>
 <body>
 
@@ -508,7 +513,12 @@ async function loadDashboard() {
   let html = '<table class="data-table"><thead><tr><th>N°</th><th>Nom</th><th>Statut</th><th>Dernière visite</th><th>Actions</th></tr></thead><tbody>';
   for (const c of recent) {
     const overdueTag = c.is_overdue ? ' ' + icon('triangle-alert', {class:'tone-warning-icon'}) : '';
-    html += `<tr><td>${escapeHtml(c.case_number)}</td><td>${escapeHtml(c.patient_name)}</td><td>${statusBadge(c.status)}</td><td>${formatDate(c.last_visit_at)}${overdueTag}</td>
+    // La ligne entiere prend la teinte de son etat : un retard se repere
+    // sans avoir a lire la colonne Statut, ce qui compte quand il y a
+    // vingt lignes a l'ecran. Le point de couleur devant le numero porte
+    // la meme information par la forme, pour qui ne distingue pas les teintes.
+    const etat = etatDossier(c);
+    html += `<tr class="ligne-${etat}"><td><span class="point-etat"></span>${escapeHtml(c.case_number)}</td><td>${escapeHtml(c.patient_name)}</td><td>${statusBadge(c.status)}</td><td>${formatDate(c.last_visit_at)}${depuisJours(c.last_visit_at)}${overdueTag}</td>
       <td class="actions"><a href="/case_detail.html?case_id=${c.id}">Ouvrir</a></td></tr>`;
   }
   html += '</tbody></table>';
@@ -919,8 +929,11 @@ async function loadCasesList(status, wrapId, search) {
     const overdueTag = c.is_overdue ? ' ' + icon('triangle-alert', {class:'tone-warning-icon'}) : '';
     const canDelete = c.visit_count === 0;
     const checked = caseSelectedIds[status].has(c.id) ? 'checked' : '';
-    html += `<tr><td>${canDelete ? `<input type="checkbox" class="case-row-checkbox" value="${c.id}" ${checked} onchange="toggleCaseSelection('${status}', '${c.id}', this.checked)">` : ''}</td>`;
-    html += `<td>${escapeHtml(c.case_number)}</td><td>${escapeHtml(c.patient_name)}</td><td>${computeAge(c.patient_date_of_birth)}</td><td>${c.patient_sex || '—'}</td><td>${formatDate(c.enrolled_at)}</td><td>${formatDate(c.last_visit_at)}${overdueTag}</td>`;
+    // Meme lecture que dans le tableau de resume : teinte de ligne, point
+    // d'etat devant le numero, anciennete a cote de la derniere visite.
+    const etat = etatDossier(c);
+    html += `<tr class="ligne-${etat}"><td>${canDelete ? `<input type="checkbox" class="case-row-checkbox" value="${c.id}" ${checked} onchange="toggleCaseSelection('${status}', '${c.id}', this.checked)">` : ''}</td>`;
+    html += `<td><span class="point-etat"></span>${escapeHtml(c.case_number)}</td><td>${escapeHtml(c.patient_name)}</td><td>${computeAge(c.patient_date_of_birth)}</td><td>${c.patient_sex || '—'}</td><td>${formatDate(c.enrolled_at)}</td><td>${formatDate(c.last_visit_at)}${depuisJours(c.last_visit_at)}${overdueTag}</td>`;
     if (showReason) html += `<td>${escapeHtml(c.closed_reason || '—')}</td>`;
     html += `<td class="actions">
       <a href="/case_detail.html?case_id=${c.id}">Ouvrir</a>

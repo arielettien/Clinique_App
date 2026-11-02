@@ -48,6 +48,7 @@
   }
   .module-card.survey .module-icon { color: var(--primary); }
   .module-card.followup .module-icon { color: var(--project-2); }
+  .module-card.spreadsheets .module-icon { color: var(--project-4); }
 
   .module-title {
     font-family: var(--font-display);
@@ -89,6 +90,13 @@
   .module-card.followup .module-btn:hover {
     background: #6D28D9;
   }
+  .module-card.spreadsheets .module-btn {
+    background: var(--project-4);
+    color: #fff;
+  }
+  .module-card.spreadsheets .module-btn:hover {
+    filter: brightness(0.92);
+  }
 
   .hub-info {
     background: var(--surface-muted);
@@ -101,6 +109,11 @@
   }
   .hub-info strong { color: var(--ink); }
 </style>
+  <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
+       le theme l'emporte sur les reglages locaux herites de l'ancienne
+       charte. Retirer cette ligne suffit a revenir a l'apparence
+       precedente : aucune autre modification n'a ete faite. -->
+  <link rel="stylesheet" href="/style_blanc_bleu.css">
 </head>
 <body>
 
@@ -136,6 +149,16 @@
           Inspiré de CommCare.
         </div>
         <a class="module-btn" id="btn-followup" href="#">Entrer dans le module →</a>
+      </div>
+
+      <div class="module-card spreadsheets" id="card-spreadsheets">
+        <div class="module-icon">📊</div>
+        <div class="module-title">Module 3 : Tableurs</div>
+        <div class="module-desc">
+          Déposer les tableurs Excel de suivi du projet et les consulter directement ici.
+          Les fichiers restent accessibles à toute l'équipe, même quand celui qui les tient est absent.
+        </div>
+        <a class="module-btn" id="btn-spreadsheets" href="#">Entrer dans le module →</a>
       </div>
     </div>
 
@@ -178,6 +201,7 @@ if (!projectId) {
 
   document.getElementById('btn-survey').href = `/survey.html?project_id=${projectId}`;
   document.getElementById('btn-followup').href = `/follow_up.html?project_id=${projectId}`;
+  document.getElementById('btn-spreadsheets').href = `/spreadsheets.html?project_id=${projectId}`;
 
   document.getElementById('card-survey').addEventListener('click', (e) => {
     if (e.target.closest('a')) return;

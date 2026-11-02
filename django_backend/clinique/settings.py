@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     "cases",
     "attachments",
     "community",
+    "spreadsheets",
+    "workbooks",
 ]
 
 MIDDLEWARE = [

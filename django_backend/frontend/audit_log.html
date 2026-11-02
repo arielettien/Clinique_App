@@ -27,6 +27,11 @@
   .pagination button { background: var(--surface); border: 1px solid var(--border); padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer; }
   .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
+  <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
+       le theme l'emporte sur les reglages locaux herites de l'ancienne
+       charte. Retirer cette ligne suffit a revenir a l'apparence
+       precedente : aucune autre modification n'a ete faite. -->
+  <link rel="stylesheet" href="/style_blanc_bleu.css">
 </head>
 <body>
 
