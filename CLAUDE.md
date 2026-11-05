@@ -88,6 +88,20 @@ is real business logic — a `services.py` kept separate from the HTTP layer.
 - `cases/` — `Case` (a longitudinal enrollment of a `Patient` in a `Project`), its timeline, and exports.
 - `attachments/` — `Media` metadata and upload/serving rules.
 - `community/` — the public, unauthenticated endpoints behind a shared access code.
+- `indicators/` — monitoring & evaluation dashboard. Models: `Indicator` (source `Form`, `calculation` =
+  `count` / `count_patients` / `sum` / `percentage`, `condition` and `denominator_condition` written in the
+  `formula_engine` syntax — equality is `==`, patient variables `age` and `sexe` are available — annual
+  `target`), `Site` (project, `code` = the choice *value* stored in the form's site field, name, health
+  region), optional `IndicatorTarget` (per month, per site or whole project) and `DashboardSettings` (which
+  form field holds the site, "on track" threshold, age bands). **Indicator values are never stored**:
+  `services.py` loads the period's submissions in one query, turns each into an evaluated row, and every view
+  (by month, site, region, age × sex, cumulative) re-aggregates a subset of rows — percentages and distinct
+  people are therefore recomputed over the whole set, never summed. Months are bucketed on `collected_at`;
+  age is taken at the collection date; missing sex/age/site go to "Non renseigné", never dropped. Targets
+  are split equally (1/12 per month, then per site) unless an `IndicatorTarget` overrides them; a percentage
+  target is a rate and is never split or summed; sex/age filters do not scale targets. Routes:
+  `GET /api/donors`, `GET /api/projects/{id}/dashboard` (also `format=csv|xlsx`, audit-logged), and
+  admin-only configuration endpoints for indicators, sites, settings and detailed targets.
 - `core/` — cross-cutting pieces: `AuditLog`, audit helper, permissions, rate limiting, frontend serving,
   the full test suite, and framework-agnostic modules carried over unchanged:
   - `formula_engine.py` — a small hand-rolled, **eval-free** expression parser/evaluator (tokenizer +
@@ -106,6 +120,13 @@ talks to the API in JSON and is unchanged from the previous version apart from t
   `/login.html` if unauthenticated (but not while offline), lazy-loads icons and the offline DB layer. It
   also wraps `fetch()` once to attach the `X-CSRFToken` header to every same-origin mutating request —
   without it, all 58 POST/PUT/DELETE calls scattered across the pages would be rejected.
+- `tableau_de_bord.html` — multi-donor indicator dashboard (donor → project → indicator, site/sex/age filters,
+  3/6/12-month rolling window ending on the last complete month, all kept in the query string so a shared
+  link reopens the same view; KPIs, HTML/CSS charts with no chart library, per-site table, print-to-PDF and
+  Excel export). `indicateurs.html` is its admin-only configuration screen. Both use their own visual
+  direction (`tableau_de_bord.css`, scoped under `body.dash`: Barlow fonts hosted locally in `fonts/`,
+  steel-blue accent, square outlined cards); the rest of the app keeps `style.css` + `style_blanc_bleu.css`.
+  The dashboard needs the server — it is not available offline (the page says so).
 - `sw.js` — Service Worker. App-shell files are cache-first, updated in the background; `/api/` requests are
   never cached here (offline data goes through IndexedDB, so the app's own logic controls freshness).
 - `dexie.min.js` + `offline_db.js` — IndexedDB-backed local cache plus an `outbox` queueing submissions made

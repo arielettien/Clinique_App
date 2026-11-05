@@ -1,0 +1,4 @@
+# Les scripts shell sont executes DANS les conteneurs Linux : des fins de
+# ligne Windows (CRLF, ajoutees par core.autocrlf) les font echouer des la
+# premiere ligne ("set: Illegal option -").
+*.sh text eol=lf

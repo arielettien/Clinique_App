@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "community",
     "spreadsheets",
     "workbooks",
+    "indicators",
 ]
 
 MIDDLEWARE = [

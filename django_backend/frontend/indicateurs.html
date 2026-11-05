@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indicateurs — Clinique</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style_blanc_bleu.css">
+<link rel="stylesheet" href="/tableau_de_bord.css">
+<style>
+  .cfg-title h1 { font-size: 1.75rem; margin: var(--space-1) 0; }
+  .cfg-title { margin-bottom: var(--space-6); }
+  .cfg-section { margin-bottom: var(--space-6); }
+  .cfg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
+  .cfg-grid .wide { grid-column: 1 / -1; }
+  .cfg-field label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+                     letter-spacing: .06em; color: var(--d-ink-muted); margin-bottom: var(--space-1); }
+  .cfg-field input, .cfg-field select, .cfg-field textarea { width: 100%; }
+  .cfg-field textarea { min-height: 72px; font-family: var(--font-mono); font-size: 0.85rem; }
+  .cfg-help { font-size: 0.85rem; color: var(--d-ink-muted); margin-top: var(--space-1); }
+  .cfg-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-4); align-items: center; }
+  .cfg-msg { font-size: 0.85rem; }
+  .cfg-msg.err { font-weight: 600; }
+  .d-table input, .d-table select { width: 100%; min-width: 110px; }
+  .row-actions { display: flex; gap: var(--space-1); justify-content: flex-end; white-space: nowrap; }
+  .icon-btn { width: var(--cible-tactile); height: var(--cible-tactile); padding: 0; }
+  .table-wrap { overflow-x: auto; overflow-y: hidden; }
+  code { font-family: var(--font-mono); font-size: 0.85rem; background: var(--d-accent-100); padding: 0 var(--space-1); }
+</style>
+</head>
+<body class="dash">
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+    <div class="cfg-title">
+      <div class="d-eyebrow" id="eyebrow">Suivi &amp; Évaluation</div>
+      <h1>Configurer les indicateurs</h1>
+      <div class="d-muted">Ce que mesure le tableau de bord de ce projet : les indicateurs, leurs cibles, les sites et leurs régions.
+        <a href="#" id="back-dashboard">Voir le tableau de bord</a></div>
+    </div>
+    <div id="page-error" class="d-error hidden" role="alert"></div>
+    <div id="content"><div class="d-empty">Chargement…</div></div>
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const projectId = new URLSearchParams(location.search).get('project_id');
+const $ = (id) => document.getElementById(id);
+const ic = (name) => (window.icon ? icon(name) : '');
+const CALCS = {
+  count: 'Nombre de fiches',
+  count_patients: 'Nombre de personnes distinctes',
+  sum: "Somme d'un champ",
+  percentage: 'Pourcentage',
+};
+let settings = null, sites = [], indicators = [];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function showError(msg) {
+  $('page-error').innerHTML = msg ? `${ic('circle-alert')} <span>${esc(msg)}</span>` : '';
+  $('page-error').classList.toggle('hidden', !msg);
+  if (msg) window.scrollTo({ top: 0 });
+}
+async function api(method, url, body) {
+  const res = await fetch(url, {
+    method, credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "L'opération n'a pas abouti. Réessaie dans un instant.");
+  return data;
+}
+function flash(el, text, isError) {
+  el.textContent = text;
+  el.className = 'cfg-msg' + (isError ? ' err' : '');
+  if (!isError) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 3000);
+}
+function formName(id) { const f = settings.forms.find(x => x.id === id); return f ? f.name : '—'; }
+
+// Tranches d'age : saisies en texte ("0-4, 5-14, 50+"), plus rapide a
+// relire et corriger qu'une liste de champs min/max.
+function bandsToText(bands) { return bands.map(([a, b]) => b === null ? `${a}+` : `${a}-${b}`).join(', '); }
+function textToBands(text) {
+  return text.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+    const open = /^(\d+)\s*\+$/.exec(s);
+    if (open) return [Number(open[1]), null];
+    const range = /^(\d+)\s*[-–]\s*(\d+)$/.exec(s);
+    if (range) return [Number(range[1]), Number(range[2])];
+    throw new Error(`Tranche d'âge illisible : « ${s} ». Écris par exemple 0-4, 5-14, 50+.`);
+  });
+}
+
+// ---------------------------------------------------------------------------
+function render() {
+  const selectFields = [];
+  settings.forms.forEach(f => f.fields.filter(x => x.type === 'select_one').forEach(x => {
+    if (!selectFields.some(s => s.id === x.id)) selectFields.push({ id: x.id, label: x.label, form: f.name });
+  }));
+  $('content').innerHTML = `
+    <section class="d-card cfg-section">
+      <h2 class="d-card-title">Indicateurs
+        <button type="button" class="btn btn-primary" id="ind-new">${ic('plus')} Nouvel indicateur</button></h2>
+      <div id="ind-editor" class="hidden"></div>
+      <div class="table-wrap" id="ind-table"></div>
+    </section>
+
+    <section class="d-card cfg-section">
+      <h2 class="d-card-title">Réglages du tableau de bord</h2>
+      <div class="cfg-grid">
+        <div class="cfg-field">
+          <label for="s-field">Champ qui contient le site</label>
+          <select id="s-field">
+            <option value="">— Aucun —</option>
+            ${selectFields.map(f => `<option value="${esc(f.id)}">${esc(f.label)} (${esc(f.id)}) — ${esc(f.form)}</option>`).join('')}
+          </select>
+          <div class="cfg-help">Question à choix unique des formulaires. Sa valeur doit correspondre au code d'un site ci-dessous.</div>
+        </div>
+        <div class="cfg-field">
+          <label for="s-threshold">Seuil « En bonne voie » (%)</label>
+          <input type="number" id="s-threshold" min="1" max="99" step="1">
+          <div class="cfg-help">En dessous de ce taux d'atteinte, un indicateur est « En retard ».</div>
+        </div>
+        <div class="cfg-field">
+          <label for="s-bands">Tranches d'âge</label>
+          <input type="text" id="s-bands" placeholder="0-4, 5-14, 15-24, 25-49, 50+">
+          <div class="cfg-help">Âge à la date de collecte. La dernière tranche peut rester ouverte (50+).</div>
+        </div>
+      </div>
+      <div class="cfg-actions"><button type="button" class="btn btn-ghost" id="s-save">${ic('save')} Enregistrer les réglages</button><span id="s-msg" class="cfg-msg"></span></div>
+    </section>
+
+    <section class="d-card cfg-section">
+      <h2 class="d-card-title">Sites et régions sanitaires
+        <button type="button" class="btn btn-ghost" id="site-import">${ic('download')} Importer depuis le formulaire</button></h2>
+      <div class="table-wrap" id="site-table"></div>
+      <div class="cfg-actions"><span id="site-msg" class="cfg-msg"></span></div>
+    </section>
+
+    <section class="d-card cfg-section">
+      <h2 class="d-card-title">Cibles détaillées</h2>
+      <p class="d-muted">Facultatif. Par défaut, la cible annuelle d'un indicateur est répartie à parts égales entre les mois et entre les sites.
+        Une cible saisie ici remplace cette part pour le mois (et le site) indiqué.</p>
+      <div class="cfg-grid"><div class="cfg-field"><label for="t-ind">Indicateur</label><select id="t-ind"></select></div></div>
+      <div class="table-wrap" id="t-table" style="margin-top:var(--space-4)"></div>
+      <div class="cfg-actions">
+        <button type="button" class="btn btn-ghost" id="t-add">${ic('plus')} Ajouter une cible</button>
+        <button type="button" class="btn btn-ghost" id="t-save">${ic('save')} Enregistrer les cibles</button>
+        <span id="t-msg" class="cfg-msg"></span>
+      </div>
+    </section>`;
+
+  $('s-field').value = settings.site_field_id || '';
+  $('s-threshold').value = settings.on_track_threshold;
+  $('s-bands').value = bandsToText(settings.age_bands);
+  $('s-save').addEventListener('click', saveSettings);
+  $('ind-new').addEventListener('click', () => openEditor(null));
+  $('site-import').addEventListener('click', importSites);
+  $('t-ind').addEventListener('change', loadTargets);
+  $('t-add').addEventListener('click', () => addTargetRow({ site_id: null, period: '', value: '' }));
+  $('t-save').addEventListener('click', saveTargets);
+  renderIndicators();
+  renderSites();
+  fillTargetIndicators();
+}
+
+// --- Indicateurs -------------------------------------------------------------
+function renderIndicators() {
+  if (!indicators.length) {
+    $('ind-table').innerHTML = `<div class="d-empty">${ic('bar-chart-3')}Aucun indicateur. Crée le premier avec « Nouvel indicateur ».</div>`;
+    return;
+  }
+  $('ind-table').innerHTML = `<table class="d-table">
+    <thead><tr><th>Ordre</th><th>Indicateur</th><th>Formulaire</th><th>Calcul</th><th class="r">Cible</th><th></th></tr></thead>
+    <tbody>${indicators.map(i => `<tr>
+      <td class="r">${i.display_order}</td>
+      <td>${esc(i.name)}${i.unit ? ` <span class="d-muted">(${esc(i.unit)})</span>` : ''}</td>
+      <td>${esc(formName(i.form_id))}</td>
+      <td>${esc(CALCS[i.calculation])}</td>
+      <td class="r">${i.target === null ? '—' : new Intl.NumberFormat('fr-FR').format(i.target) + (i.calculation === 'percentage' ? ' %' : '')}</td>
+      <td><div class="row-actions">
+        <button type="button" class="btn btn-ghost icon-btn" data-edit="${esc(i.id)}" aria-label="Modifier ${esc(i.name)}">${ic('pencil')}</button>
+        <button type="button" class="btn btn-ghost icon-btn" data-del="${esc(i.id)}" aria-label="Supprimer ${esc(i.name)}">${ic('trash-2')}</button>
+      </div></td></tr>`).join('')}</tbody></table>`;
+  document.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () =>
+    openEditor(indicators.find(i => i.id === b.dataset.edit))));
+  document.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () =>
+    deleteIndicator(indicators.find(i => i.id === b.dataset.del))));
+}
+
+function numericFields(formId) {
+  const f = settings.forms.find(x => x.id === formId);
+  return f ? f.fields.filter(x => ['number', 'decimal', 'calculated'].includes(x.type)) : [];
+}
+
+function openEditor(ind) {
+  const ed = $('ind-editor');
+  const v = ind || { name: '', form_id: (settings.forms[0] || {}).id, calculation: 'count', value_field_id: '',
+                     condition: '', denominator_condition: '', target: null, unit: '',
+                     display_order: indicators.length + 1 };
+  ed.classList.remove('hidden');
+  ed.innerHTML = `
+    <div class="cfg-grid" style="margin-bottom:var(--space-5)">
+      <div class="cfg-field wide"><label for="e-name">Nom de l'indicateur</label>
+        <input type="text" id="e-name" value="${esc(v.name)}" placeholder="Nombre de personnes dépistées"></div>
+      <div class="cfg-field"><label for="e-form">Formulaire source</label>
+        <select id="e-form">${settings.forms.map(f => `<option value="${esc(f.id)}">${esc(f.name)}${f.is_active ? '' : ' (archivé)'}</option>`).join('')}</select></div>
+      <div class="cfg-field"><label for="e-calc">Calcul</label>
+        <select id="e-calc">${Object.entries(CALCS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+      <div class="cfg-field" id="e-value-wrap"><label for="e-value">Champ à additionner</label><select id="e-value"></select></div>
+      <div class="cfg-field wide"><label for="e-cond" id="e-cond-label">Condition (facultatif)</label>
+        <textarea id="e-cond" placeholder="resultat == 'positif'">${esc(v.condition || '')}</textarea>
+        <div class="cfg-help">Seules les fiches qui remplissent la condition sont comptées. Syntaxe des formules :
+          <code>resultat == 'positif'</code>, <code>age &lt; 5 and sexe == 'F'</code>, <code>selected(symptomes, 'fievre')</code>.
+          Utilise <code>==</code> pour l'égalité. Variables du patient : <code>age</code> (à la date de collecte) et <code>sexe</code> (F ou M).</div></div>
+      <div class="cfg-field wide" id="e-den-wrap"><label for="e-den">Population de référence — dénominateur (facultatif)</label>
+        <textarea id="e-den" placeholder="depiste == 'oui'">${esc(v.denominator_condition || '')}</textarea>
+        <div class="cfg-help">Vide = toutes les fiches du formulaire. Le pourcentage est recalculé sur toute la période, jamais additionné mois par mois.</div></div>
+      <div class="cfg-field"><label for="e-target" id="e-target-label">Cible annuelle</label>
+        <input type="number" id="e-target" min="0" step="any" value="${v.target ?? ''}"></div>
+      <div class="cfg-field"><label for="e-unit">Unité</label>
+        <input type="text" id="e-unit" value="${esc(v.unit || '')}" placeholder="personnes"></div>
+      <div class="cfg-field"><label for="e-order">Ordre d'affichage</label>
+        <input type="number" id="e-order" step="1" value="${v.display_order}"></div>
+      <div class="cfg-actions wide">
+        <button type="button" class="btn btn-primary" id="e-save">${ic('save')} ${ind ? 'Enregistrer' : 'Créer l\'indicateur'}</button>
+        <button type="button" class="btn btn-ghost" id="e-cancel">Annuler</button>
+        <span id="e-msg" class="cfg-msg"></span>
+      </div>
+    </div>`;
+  $('e-form').value = v.form_id || '';
+  $('e-calc').value = v.calculation;
+  const syncCalc = () => {
+    const calc = $('e-calc').value;
+    $('e-value-wrap').classList.toggle('hidden', calc !== 'sum');
+    $('e-den-wrap').classList.toggle('hidden', calc !== 'percentage');
+    $('e-cond-label').textContent = calc === 'percentage' ? 'Condition du numérateur' : 'Condition (facultatif)';
+    $('e-target-label').textContent = calc === 'percentage' ? 'Taux visé (%)' : 'Cible annuelle (12 mois)';
+    $('e-value').innerHTML = numericFields($('e-form').value)
+      .map(f => `<option value="${esc(f.id)}">${esc(f.label)} (${esc(f.id)})</option>`).join('')
+      || '<option value="">Aucun champ numérique dans ce formulaire</option>';
+    $('e-value').value = v.value_field_id || $('e-value').value;
+  };
+  $('e-calc').addEventListener('change', syncCalc);
+  $('e-form').addEventListener('change', syncCalc);
+  syncCalc();
+  $('e-cancel').addEventListener('click', () => { ed.classList.add('hidden'); ed.innerHTML = ''; });
+  $('e-save').addEventListener('click', async () => {
+    const body = {
+      name: $('e-name').value, form_id: $('e-form').value, calculation: $('e-calc').value,
+      value_field_id: $('e-value').value, condition: $('e-cond').value,
+      denominator_condition: $('e-den').value, target: $('e-target').value,
+      unit: $('e-unit').value, display_order: $('e-order').value,
+    };
+    try {
+      if (ind) await api('PUT', `/api/indicators/${ind.id}`, body);
+      else await api('POST', `/api/projects/${projectId}/indicators`, body);
+      ed.classList.add('hidden'); ed.innerHTML = '';
+      await reload();
+    } catch (e) { flash($('e-msg'), e.message, true); }
+  });
+  $('e-name').focus();
+}
+
+async function deleteIndicator(ind) {
+  if (!confirm(`Supprimer l'indicateur « ${ind.name} » et ses cibles détaillées ? Les fiches saisies ne sont pas touchées.`)) return;
+  try { await api('DELETE', `/api/indicators/${ind.id}`); await reload(); }
+  catch (e) { showError(e.message); }
+}
+
+// --- Reglages -----------------------------------------------------------------
+async function saveSettings() {
+  try {
+    const body = {
+      site_field_id: $('s-field').value,
+      on_track_threshold: Number($('s-threshold').value),
+      age_bands: textToBands($('s-bands').value),
+    };
+    settings = { ...settings, ...(await api('PUT', `/api/projects/${projectId}/dashboard/settings`, body)) };
+    flash($('s-msg'), 'Réglages enregistrés.');
+  } catch (e) { flash($('s-msg'), e.message, true); }
+}
+
+// --- Sites ----------------------------------------------------------------------
+function renderSites() {
+  const row = s => `<tr data-site="${esc(s.id || '')}">
+    <td><input type="text" class="s-code" value="${esc(s.code)}" aria-label="Code du site" placeholder="code"></td>
+    <td><input type="text" class="s-name" value="${esc(s.name)}" aria-label="Nom du site" placeholder="Nom du site"></td>
+    <td><input type="text" class="s-region" value="${esc(s.region || '')}" aria-label="Région sanitaire" placeholder="Région sanitaire"></td>
+    <td><div class="row-actions">
+      <button type="button" class="btn btn-ghost icon-btn s-save" aria-label="Enregistrer">${ic(s.id ? 'save' : 'plus')}</button>
+      ${s.id ? `<button type="button" class="btn btn-ghost icon-btn s-del" aria-label="Supprimer">${ic('trash-2')}</button>` : ''}
+    </div></td></tr>`;
+  $('site-table').innerHTML = `<table class="d-table">
+    <thead><tr><th>Code (valeur dans le formulaire)</th><th>Nom</th><th>Région sanitaire</th><th></th></tr></thead>
+    <tbody>${sites.map(row).join('')}${row({ code: '', name: '', region: '' })}</tbody></table>
+    ${sites.length ? '' : '<p class="d-muted">Aucun site. Saisis-les ci-dessus, ou importe-les depuis les choix du champ site.</p>'}`;
+  $('site-table').querySelectorAll('tr[data-site]').forEach(tr => {
+    const id = tr.dataset.site;
+    tr.querySelector('.s-save').addEventListener('click', async () => {
+      const body = { code: tr.querySelector('.s-code').value, name: tr.querySelector('.s-name').value,
+                     region: tr.querySelector('.s-region').value };
+      try {
+        if (id) await api('PUT', `/api/sites/${id}`, body);
+        else await api('POST', `/api/projects/${projectId}/sites`, body);
+        await reload(); flash($('site-msg'), 'Site enregistré.');
+      } catch (e) { flash($('site-msg'), e.message, true); }
+    });
+    const del = tr.querySelector('.s-del');
+    if (del) del.addEventListener('click', async () => {
+      if (!confirm('Supprimer ce site et ses cibles détaillées ? Les fiches saisies ne sont pas touchées.')) return;
+      try { await api('DELETE', `/api/sites/${id}`); await reload(); }
+      catch (e) { flash($('site-msg'), e.message, true); }
+    });
+  });
+}
+
+async function importSites() {
+  try {
+    const r = await api('POST', `/api/projects/${projectId}/sites/import`);
+    await reload();
+    flash($('site-msg'), r.created ? `${r.created} site(s) ajouté(s). Complète leur région.` : 'Aucun nouveau site à importer.');
+  } catch (e) { flash($('site-msg'), e.message, true); }
+}
+
+// --- Cibles detaillees -----------------------------------------------------------
+function fillTargetIndicators() {
+  $('t-ind').innerHTML = indicators.map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('')
+    || '<option value="">Aucun indicateur</option>';
+  loadTargets();
+}
+function addTargetRow(t) {
+  const tbody = $('t-table').querySelector('tbody');
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="month" class="t-period" value="${esc(t.period)}" aria-label="Mois"></td>
+    <td><select class="t-site" aria-label="Site"><option value="">Tout le projet</option>
+      ${sites.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></td>
+    <td><input type="number" class="t-value" min="0" step="any" value="${t.value ?? ''}" aria-label="Cible"></td>
+    <td><div class="row-actions"><button type="button" class="btn btn-ghost icon-btn" aria-label="Retirer">${ic('x')}</button></div></td>`;
+  tr.querySelector('.t-site').value = t.site_id || '';
+  tr.querySelector('button').addEventListener('click', () => tr.remove());
+  tbody.appendChild(tr);
+}
+async function loadTargets() {
+  const id = $('t-ind').value;
+  if (!id) { $('t-table').innerHTML = ''; return; }
+  try {
+    const targets = await api('GET', `/api/indicators/${id}/targets`);
+    $('t-table').innerHTML = `<table class="d-table"><thead><tr><th>Mois</th><th>Site</th><th>Cible</th><th></th></tr></thead><tbody></tbody></table>`;
+    targets.forEach(addTargetRow);
+  } catch (e) { flash($('t-msg'), e.message, true); }
+}
+async function saveTargets() {
+  const id = $('t-ind').value;
+  if (!id) return;
+  const rows = [...$('t-table').querySelectorAll('tbody tr')].map(tr => ({
+    period: tr.querySelector('.t-period').value,
+    site_id: tr.querySelector('.t-site').value || null,
+    value: tr.querySelector('.t-value').value,
+  })).filter(r => r.period || r.value);
+  try {
+    await api('PUT', `/api/indicators/${id}/targets`, { targets: rows });
+    await loadTargets();
+    flash($('t-msg'), 'Cibles enregistrées.');
+  } catch (e) { flash($('t-msg'), e.message, true); }
+}
+
+// ---------------------------------------------------------------------------
+async function reload() {
+  const [s, si, ind] = await Promise.all([
+    api('GET', `/api/projects/${projectId}/dashboard/settings`),
+    api('GET', `/api/projects/${projectId}/sites`),
+    api('GET', `/api/projects/${projectId}/indicators`),
+  ]);
+  const keepTarget = $('t-ind') ? $('t-ind').value : '';
+  settings = s; sites = si; indicators = ind;
+  // Re-rendu partiel : on ne reconstruit pas les reglages pour ne pas
+  // effacer une saisie en cours dans les autres sections.
+  if (!$('ind-table')) { render(); return; }
+  renderIndicators(); renderSites(); fillTargetIndicators();
+  if (keepTarget && indicators.some(i => i.id === keepTarget)) { $('t-ind').value = keepTarget; loadTargets(); }
+}
+
+(async function init() {
+  const user = await initAppShell(projectId);
+  if (!user) {
+    $('content').innerHTML = `<div class="d-card"><div class="d-empty">${ic('circle-alert')}La configuration demande une connexion au serveur.</div></div>`;
+    return;
+  }
+  if (!projectId) {
+    $('content').innerHTML = `<div class="d-card"><div class="d-empty">${ic('folder')}Aucun projet sélectionné. Ouvre cet écran depuis le tableau de bord.</div></div>`;
+    return;
+  }
+  $('back-dashboard').href = `/tableau_de_bord.html?project_id=${encodeURIComponent(projectId)}`;
+  if (user.role !== 'admin') {
+    $('content').innerHTML = `<div class="d-card"><div class="d-empty">${ic('lock')}Seuls les administrateurs peuvent configurer les indicateurs. Le tableau de bord reste consultable par tous.</div></div>`;
+    return;
+  }
+  try {
+    const project = await api('GET', `/api/projects/${projectId}`);
+    $('eyebrow').textContent = `${(project.main_donor || '').trim() || 'Sans bailleur'} · ${project.name}`;
+    await reload();
+  } catch (e) {
+    showError(e.message);
+    $('content').innerHTML = '';
+  }
+})();
+</script>
+</body>
+</html>

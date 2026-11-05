@@ -34,3 +34,6 @@ captures_*.zip
 
 # Resultats d evaluation du skill : materiel de travail, regenerable.
 .claude/skills/*-workspace/
+
+# Reglages Docker propres a une machine (ex. port de l instance d essai).
+docker-compose.override.yml

@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tableau de bord — Clinique</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style_blanc_bleu.css">
+<link rel="stylesheet" href="/tableau_de_bord.css">
+<style>
+  .dash-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4);
+               flex-wrap: wrap; margin-bottom: var(--space-5); }
+  .dash-head .d-eyebrow { display: flex; align-items: center; gap: var(--space-2); }
+
+  .dash-title { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--space-4);
+                flex-wrap: wrap; margin-bottom: var(--space-5); }
+  .dash-title h1 { font-size: 1.75rem; margin: var(--space-1) 0; line-height: 1.15; }
+  .dash-actions { display: flex; gap: var(--space-2); white-space: nowrap; }
+  /* Ecran de bureau d'abord ; sur telephone, les boutons passent a la ligne
+     (chacun reste sur une ligne) plutot que d'etre coupes au bord. */
+  @media (max-width: 600px) { .dash-actions { flex-wrap: wrap; } }
+
+  .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+             gap: var(--space-3) var(--space-4); margin-bottom: var(--space-6); align-items: end; }
+  .filters label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+                   letter-spacing: .06em; color: var(--d-ink-muted); margin-bottom: var(--space-1); }
+  .filters select { width: 100%; }
+  .filters .span-2 { grid-column: span 2; }
+  @media (max-width: 420px) { .filters .span-2 { grid-column: auto; } }
+
+  .segmented { display: flex; border: 1px solid var(--d-line); }
+  .segmented button { flex: 1; min-height: var(--cible-tactile); border: none; background: transparent;
+                      font: inherit; color: var(--d-ink); cursor: pointer; white-space: nowrap;
+                      padding: 0 var(--space-2); }
+  .segmented button + button { border-left: 1px solid var(--d-line); }
+  .segmented button[aria-pressed="true"] { background: var(--d-accent-600); color: #fff; }
+  .segmented.small button { min-height: 36px; font-size: 0.85rem; padding: 0 var(--space-3); }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4);
+          margin-bottom: var(--space-5); }
+  .kpi-value { font-family: var(--d-font-title); font-size: 1.75rem; font-weight: 600; line-height: 1.1;
+               font-variant-numeric: tabular-nums; margin: var(--space-2) 0; display: flex;
+               align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
+  .kpi-value small { font-family: var(--d-font-body); font-size: 0.85rem; font-weight: 400; color: var(--d-ink-muted); }
+  .kpi .d-progress { margin-top: var(--space-3); }
+
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+            gap: var(--space-4); margin-bottom: var(--space-5); }
+  .span-chart-2 { grid-column: span 2; }
+  @media (max-width: 900px) { .span-chart-2 { grid-column: auto; } }
+
+  /* --- Evolution mensuelle --------------------------------------------- */
+  .bars { display: grid; grid-template-columns: 48px 1fr; gap: var(--space-2); }
+  .y-axis { position: relative; height: 240px; font-size: 0.75rem; color: var(--d-ink-muted); }
+  .y-axis span { position: absolute; right: 0; transform: translateY(50%); font-variant-numeric: tabular-nums; }
+  .plot { position: relative; height: 240px; display: flex; gap: var(--space-1);
+          border-bottom: 1px solid var(--d-ink); }
+  .gridline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--d-line-soft); }
+  .month { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end;
+           justify-content: center; }
+  .bar { width: 64%; max-width: 44px; background: var(--d-accent-400); position: relative; }
+  .bar.hit { background: var(--d-accent-700); }
+  .bar-val { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); padding-bottom: 2px;
+             font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .target-line { position: absolute; left: 8%; right: 8%; border-top: 2px dashed var(--d-accent-800); }
+  .month[data-tip]:hover::after, .month[data-tip]:focus::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+    background: var(--d-ink); color: #fff; font-size: 0.75rem; padding: var(--space-1) var(--space-2);
+    white-space: nowrap; z-index: 2; pointer-events: none;
+  }
+  .month:focus { outline: 1px solid var(--d-accent-600); }
+  .x-labels { display: flex; gap: var(--space-1); margin-left: calc(48px + var(--space-2)); margin-top: var(--space-1); }
+  .x-labels span { flex: 1; min-width: 0; text-align: center; font-size: 0.75rem; color: var(--d-ink-muted);
+                   white-space: nowrap; overflow: hidden; }
+  .legend { display: flex; gap: var(--space-4); flex-wrap: wrap; font-size: 0.85rem; color: var(--d-ink-muted);
+            margin-top: var(--space-3); }
+  .legend i { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; margin-right: var(--space-1); }
+  .legend i.real { background: var(--d-accent-400); }
+  .legend i.hit { background: var(--d-accent-700); }
+  .legend i.target { height: 0; border-top: 2px dashed var(--d-accent-800); vertical-align: 3px; }
+
+  /* --- Liste des indicateurs ------------------------------------------- */
+  .ind-list { display: flex; flex-direction: column; }
+  .ind-item { display: block; width: 100%; text-align: left; background: transparent; border: none;
+              border-bottom: 1px solid var(--d-line-soft); padding: var(--space-3) var(--space-2);
+              font: inherit; color: var(--d-ink); cursor: pointer; min-height: var(--cible-tactile); }
+  .ind-item:hover { background: var(--d-accent-100); }
+  .ind-item[aria-current="true"] { background: var(--d-accent-100); box-shadow: inset 3px 0 0 var(--d-accent-700); }
+  .ind-row { display: flex; justify-content: space-between; gap: var(--space-3); align-items: baseline; }
+  .ind-name { font-weight: 500; }
+  .ind-figs { white-space: nowrap; font-size: 0.85rem; color: var(--d-ink-muted); font-variant-numeric: tabular-nums; }
+  .ind-item .d-progress { margin-top: var(--space-2); }
+
+  /* --- Regions ------------------------------------------------------------ */
+  .hbar-row { display: grid; grid-template-columns: minmax(80px, 30%) 1fr auto; gap: var(--space-3);
+              align-items: center; padding: var(--space-2) 0; }
+  .hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hbar-track { height: 14px; background: var(--d-line-soft); }
+  .hbar-track span { display: block; height: 100%; background: var(--d-accent-500); }
+  .hbar-val { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 0.85rem; text-align: right; }
+
+  /* --- Pyramide ------------------------------------------------------------ */
+  .pyr-head, .pyr-row { display: grid; grid-template-columns: 1fr 110px 1fr; gap: var(--space-2); align-items: center; }
+  .pyr-head { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+              color: var(--d-ink-muted); margin-bottom: var(--space-2); }
+  .pyr-head .f { text-align: right; }
+  .pyr-row { padding: var(--space-1) 0; transition: opacity var(--transition-fast); }
+  .pyr-row.dim { opacity: .35; }
+  .pyr-band { text-align: center; font-size: 0.85rem; white-space: nowrap; }
+  .pyr-side { display: flex; align-items: center; gap: var(--space-2); height: 22px; }
+  .pyr-side.f { justify-content: flex-end; }
+  .pyr-side .b { height: 100%; }
+  .pyr-side.f .b { background: var(--d-accent-700); }
+  .pyr-side.m .b { background: var(--d-accent-400); }
+  .pyr-side .v { font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .legend i.f { background: var(--d-accent-700); }
+  .legend i.m { background: var(--d-accent-400); }
+
+  .table-wrap { overflow-x: auto; overflow-y: hidden; }
+
+  .offline-note { margin-bottom: var(--space-4); }
+
+  @media print {
+    html, body { height: auto !important; }
+    .app-sidebar, .app-topbar, .back-button, .filters, .dash-actions, .no-print { display: none !important; }
+    .app-main { padding: 0 !important; }
+    .d-card { break-inside: avoid; }
+    .charts { grid-template-columns: 1fr 1fr; }
+    .month[data-tip]:hover::after { display: none; }
+  }
+</style>
+</head>
+<body class="dash">
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+    <div class="dash-head">
+      <div class="d-eyebrow"><span class="icon-slot" data-icon="layout-dashboard"></span> Suivi &amp; Évaluation</div>
+      <div class="d-muted" id="computed-at"></div>
+    </div>
+
+    <div id="page-error" class="d-error hidden" role="alert"></div>
+
+    <div class="dash-title">
+      <div>
+        <div class="d-eyebrow" id="title-eyebrow">…</div>
+        <h1 id="title-main">Tableau de bord des indicateurs</h1>
+        <div class="d-muted" id="title-sub">Réalisé et cible de chaque indicateur, par bailleur et par projet.</div>
+      </div>
+      <div class="dash-actions">
+        <a class="btn btn-ghost hidden" id="config-link" href="#"><span class="icon-slot" data-icon="settings"></span> Configurer</a>
+        <button type="button" class="btn btn-ghost" id="btn-pdf"><span class="icon-slot" data-icon="printer"></span> Exporter PDF</button>
+        <button type="button" class="btn btn-primary" id="btn-xlsx"><span class="icon-slot" data-icon="file-down"></span> Exporter Excel</button>
+      </div>
+    </div>
+
+    <form class="filters" id="filters" onsubmit="return false">
+      <div><label for="f-donor">Bailleur</label><select id="f-donor"></select></div>
+      <div><label for="f-project">Projet</label><select id="f-project"></select></div>
+      <div class="span-2"><label for="f-indicator">Indicateur</label><select id="f-indicator"></select></div>
+      <div><label for="f-site">Site / structure sanitaire</label><select id="f-site"></select></div>
+      <div><label for="f-sex">Sexe</label>
+        <select id="f-sex"><option value="">Tous</option><option value="F">Femmes</option><option value="M">Hommes</option></select></div>
+      <div><label for="f-age">Tranche d'âge</label><select id="f-age"></select></div>
+      <div><label id="l-period">Période</label>
+        <div class="segmented" role="group" aria-labelledby="l-period" id="f-period">
+          <button type="button" data-months="3">3 mois</button>
+          <button type="button" data-months="6">6 mois</button>
+          <button type="button" data-months="12">12 mois</button>
+        </div>
+      </div>
+    </form>
+
+    <div id="content"><div class="d-empty">Chargement…</div></div>
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// Etat de la vue. Tout ce qui definit "ce que l'on regarde" vit dans l'URL :
+// un lien copie dans un courriel ou un rapport rouvre exactement la meme vue.
+// ---------------------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const state = {
+  donor: params.get('donor') || '',
+  projectId: params.get('project_id') || '',
+  indicatorId: params.get('indicator_id') || '',
+  site: params.get('site') || '',
+  sexe: params.get('sexe') || '',
+  age: params.get('age') || '',
+  months: ['3', '6', '12'].includes(params.get('months')) ? Number(params.get('months')) : 12,
+  mode: params.get('mode') === 'cumul' ? 'cumul' : 'mensuel',
+};
+let donors = [];
+let data = null;
+let user = null;
+let requestSeq = 0;
+
+const $ = (id) => document.getElementById(id);
+const ic = (name) => (window.icon ? icon(name) : '');
+const nf1 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
+const nf2 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 });
+const NBSP = ' ';
+const STATUS = { reached: 'Atteint', on_track: 'En bonne voie', late: 'En retard' };
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+const MOIS_LONGS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function isPct() { return data && data.indicator && data.indicator.calculation === 'percentage'; }
+// Nombre au format francais ; "—" pour une valeur absente (jamais "0" a la
+// place d'un vide : "pas de cible" et "cible zero" ne disent pas la meme chose).
+function fmt(v, pct) {
+  if (v === null || v === undefined) return '—';
+  return pct ? nf1.format(v) + NBSP + '%' : nf2.format(v);
+}
+function fmtValue(v) { return fmt(v, isPct()); }
+function fmtRate(v) { return v === null || v === undefined ? '—' : nf1.format(v) + NBSP + '%'; }
+function shortMonth(key) { const [y, m] = key.split('-'); return `${MOIS_COURTS[m - 1]} ${y.slice(2)}`; }
+function longMonth(key) { const [y, m] = key.split('-'); return `${MOIS_LONGS[m - 1]} ${y}`; }
+
+// Fenetre glissante qui s'arrete au dernier mois COMPLET : le mois en cours,
+// a moitie saisi, ferait croire a une chute d'activite.
+function periodBounds(months) {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const start = new Date(end.getFullYear(), end.getMonth() - (months - 1), 1);
+  const k = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return { start: k(start), end: k(end) };
+}
+
+function syncUrl() {
+  const p = new URLSearchParams();
+  if (state.donor) p.set('donor', state.donor);
+  if (state.projectId) p.set('project_id', state.projectId);
+  if (state.indicatorId) p.set('indicator_id', state.indicatorId);
+  if (state.site) p.set('site', state.site);
+  if (state.sexe) p.set('sexe', state.sexe);
+  if (state.age) p.set('age', state.age);
+  p.set('months', state.months);
+  if (state.mode === 'cumul') p.set('mode', 'cumul');
+  history.replaceState(null, '', `${location.pathname}?${p}`);
+}
+
+function apiQuery(extra) {
+  const { start, end } = periodBounds(state.months);
+  const p = new URLSearchParams({ start, end });
+  if (state.indicatorId) p.set('indicator_id', state.indicatorId);
+  if (state.site) p.set('site', state.site);
+  if (state.sexe) p.set('sexe', state.sexe);
+  if (state.age) p.set('age', state.age);
+  Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
+  return `/api/projects/${encodeURIComponent(state.projectId)}/dashboard?${p}`;
+}
+
+function showError(message) {
+  const box = $('page-error');
+  box.innerHTML = message ? `${ic('circle-alert')} <span>${esc(message)}</span>` : '';
+  box.classList.toggle('hidden', !message);
+}
+
+// ---------------------------------------------------------------------------
+// Filtres
+// ---------------------------------------------------------------------------
+function fillDonors() {
+  $('f-donor').innerHTML = donors.map(d => `<option value="${esc(d.name)}">${esc(d.name)}</option>`).join('');
+  $('f-donor').value = state.donor;
+}
+function currentDonor() { return donors.find(d => d.name === state.donor); }
+function fillProjects() {
+  const d = currentDonor();
+  $('f-project').innerHTML = (d ? d.projects : []).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  $('f-project').value = state.projectId;
+}
+function fillDataFilters() {
+  const inds = data.all_indicators || [];
+  $('f-indicator').innerHTML = inds.length
+    ? inds.map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('')
+    : '<option value="">Aucun indicateur</option>';
+  $('f-indicator').value = state.indicatorId;
+
+  const sites = data.sites || [];
+  $('f-site').innerHTML = '<option value="">Tous les sites</option>'
+    + sites.map(s => `<option value="${esc(s.code)}">${esc(s.name)}</option>`).join('')
+    + '<option value="nr">Non renseigné</option>';
+  $('f-site').value = state.site;
+
+  $('f-age').innerHTML = '<option value="">Toutes</option>'
+    + (data.age_bands || []).map(b => `<option value="${esc(b.key)}">${esc(b.label)}</option>`).join('')
+    + '<option value="nr">Non renseigné</option>';
+  $('f-age').value = state.age;
+  $('f-sex').value = state.sexe;
+}
+function syncPeriodButtons() {
+  document.querySelectorAll('#f-period button').forEach(b =>
+    b.setAttribute('aria-pressed', String(Number(b.dataset.months) === state.months)));
+}
+
+function bindFilters() {
+  $('f-donor').addEventListener('change', e => {
+    // Changement de bailleur : premier projet, premier indicateur, et l'age
+    // remis a "Toutes" (les tranches peuvent differer d'un projet a l'autre).
+    state.donor = e.target.value;
+    const d = currentDonor();
+    state.projectId = d && d.projects[0] ? d.projects[0].id : '';
+    state.indicatorId = ''; state.site = ''; state.age = '';
+    fillProjects(); load();
+  });
+  $('f-project').addEventListener('change', e => {
+    state.projectId = e.target.value;
+    state.indicatorId = ''; state.site = ''; state.age = '';
+    load();
+  });
+  $('f-indicator').addEventListener('change', e => { state.indicatorId = e.target.value; load(); });
+  $('f-site').addEventListener('change', e => { state.site = e.target.value; load(); });
+  $('f-sex').addEventListener('change', e => { state.sexe = e.target.value; load(); });
+  $('f-age').addEventListener('change', e => { state.age = e.target.value; load(); });
+  document.querySelectorAll('#f-period button').forEach(b => b.addEventListener('click', () => {
+    state.months = Number(b.dataset.months); syncPeriodButtons(); load();
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Chargement
+// ---------------------------------------------------------------------------
+async function load() {
+  syncUrl();
+  showError('');
+  if (!state.projectId) { renderNoProject(); return; }
+  const seq = ++requestSeq;
+  let res;
+  try {
+    res = await fetch(apiQuery(), { credentials: 'same-origin' });
+  } catch (e) {
+    renderOffline(); return;
+  }
+  // Une reponse plus ancienne qui arrive apres une plus recente (filtres
+  // changes vite) ne doit pas ecraser l'affichage.
+  if (seq !== requestSeq) return;
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showError(body.detail || "Impossible de calculer le tableau de bord. Réessaie dans un instant.");
+    if (res.status === 404 && state.indicatorId) { state.indicatorId = ''; load(); }
+    return;
+  }
+  data = body;
+  if (data.indicator) state.indicatorId = data.indicator.id;
+  syncUrl();
+  fillDataFilters();
+  render();
+}
+
+// ---------------------------------------------------------------------------
+// Rendu
+// ---------------------------------------------------------------------------
+function activeFiltersText() {
+  const parts = [];
+  if (state.site) {
+    const s = (data.sites || []).find(x => x.code === state.site);
+    parts.push(s ? s.name : 'Site non renseigné');
+  }
+  if (state.sexe) parts.push(state.sexe === 'F' ? 'Femmes' : 'Hommes');
+  if (state.age) {
+    const b = (data.age_bands || []).find(x => x.key === state.age);
+    parts.push(b ? b.label : 'Âge non renseigné');
+  }
+  return parts.length ? parts.join(' · ') : 'Tous les sites, tous les patients';
+}
+
+function renderHeader() {
+  const p = data.period;
+  const projectName = data.project.name;
+  $('title-eyebrow').textContent = `${data.donor || 'Sans bailleur'} · ${projectName}`;
+  $('title-main').textContent = data.indicator ? data.indicator.name : 'Aucun indicateur';
+  $('title-sub').textContent = `${longMonth(p.start)} – ${longMonth(p.end)} · ${activeFiltersText()}`;
+  const d = new Date(data.computed_at);
+  $('computed-at').textContent = `Dernier recalcul : ${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+  document.title = `${data.indicator ? data.indicator.name : 'Tableau de bord'} — Clinique`;
+  const link = $('config-link');
+  link.href = `/indicateurs.html?project_id=${encodeURIComponent(state.projectId)}`;
+  link.classList.toggle('hidden', !(user && user.role === 'admin'));
+  $('btn-xlsx').disabled = !data.indicator;
+}
+
+function statusTag(status) {
+  if (!status) return '<span class="d-muted">—</span>';
+  const icn = status === 'late' ? ic('triangle-alert') : status === 'reached' ? ic('circle-check') : '';
+  return `<span class="d-status ${status}">${icn}${STATUS[status]}</span>`;
+}
+function progressBar(rate, status) {
+  const w = Math.max(0, Math.min(100, rate || 0));  // plafonnee a 100 %
+  return `<div class="d-progress ${status === 'reached' ? 'reached' : ''}" role="img" aria-label="Taux d'atteinte ${fmtRate(rate)}"><span style="width:${w}%"></span></div>`;
+}
+
+function render() {
+  renderHeader();
+  if (!data.indicator) { renderNoIndicator(); return; }
+  const k = data.kpi;
+  const unit = isPct() ? '' : (data.indicator.unit || '');
+  const prev = k.previous_month.period;
+  let variation = '<span class="d-muted">Pas de mois précédent comparable</span>';
+  if (k.variation !== null) {
+    const sign = k.variation > 0 ? '+' : k.variation < 0 ? '−' : '';
+    variation = `<span class="d-muted">${sign}${nf1.format(Math.abs(k.variation))}${NBSP}% par rapport à ${longMonth(prev)}</span>`;
+  }
+  const noData = (data.by_month || []).every(m => !m.value) && !k.value;
+
+  $('content').innerHTML = `
+    <section class="kpis" aria-label="Chiffres clés">
+      <div class="d-card kpi">
+        <div class="d-eyebrow">Réalisé</div>
+        <div class="kpi-value">${fmtValue(k.value)}${unit ? `<small>${esc(unit)}</small>` : ''}</div>
+        <div class="d-muted">sur ${k.months} mois</div>
+      </div>
+      <div class="d-card kpi">
+        <div class="d-eyebrow">Cible</div>
+        <div class="kpi-value">${k.target === null ? '—' : fmtValue(k.target)}${unit && k.target !== null ? `<small>${esc(unit)}</small>` : ''}</div>
+        <div class="d-muted">${k.target === null ? 'Aucune cible définie' : (isPct() ? 'Taux visé sur la période' : 'Cible cumulée de la période')}</div>
+      </div>
+      <div class="d-card kpi">
+        <div class="d-eyebrow">Taux d'atteinte</div>
+        <div class="kpi-value">${fmtRate(k.progress)} ${k.status ? statusTag(k.status) : ''}</div>
+        ${k.target === null ? '<div class="d-muted">Aucune cible définie</div>' : progressBar(k.progress, k.status)}
+      </div>
+      <div class="d-card kpi">
+        <div class="d-eyebrow">Dernier mois · ${esc(longMonth(k.last_month.period))}</div>
+        <div class="kpi-value">${fmtValue(k.last_month.value)}${unit ? `<small>${esc(unit)}</small>` : ''}</div>
+        ${variation}
+      </div>
+    </section>
+
+    ${noData ? `<div class="d-card" style="margin-bottom:var(--space-4)"><div class="d-empty">${ic('calendar')}Aucune donnée sur la période pour ces filtres. Élargis la période ou retire un filtre.</div></div>` : ''}
+
+    <section class="charts">
+      <div class="d-card span-chart-2">
+        <h2 class="d-card-title">Évolution mensuelle
+          <span class="segmented small no-print" role="group" aria-label="Affichage de la série">
+            <button type="button" data-mode="mensuel" aria-pressed="${state.mode === 'mensuel'}">Mensuel</button>
+            <button type="button" data-mode="cumul" aria-pressed="${state.mode === 'cumul'}">Cumulé</button>
+          </span>
+        </h2>
+        <div id="chart-month"></div>
+      </div>
+      <div class="d-card">
+        <h2 class="d-card-title">Cible vs réalisé · tous les indicateurs</h2>
+        <div id="chart-indicators"></div>
+      </div>
+      <div class="d-card">
+        <h2 class="d-card-title">Répartition par région sanitaire</h2>
+        <div id="chart-region"></div>
+      </div>
+      <div class="d-card span-chart-2">
+        <h2 class="d-card-title">Désagrégation par âge et sexe</h2>
+        <div id="chart-pyramid"></div>
+      </div>
+    </section>
+
+    <section class="d-card">
+      <h2 class="d-card-title">Détail par site</h2>
+      <div class="table-wrap" id="site-table"></div>
+    </section>`;
+
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    state.mode = b.dataset.mode; syncUrl();
+    document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    renderMonthChart();
+  }));
+  renderMonthChart();
+  renderIndicators();
+  renderRegions();
+  renderPyramid();
+  renderSiteTable();
+  renderIconSlots();
+}
+
+// Graduation "ronde" : 4 pas de 1, 2, 2,5 ou 5 x 10^n, pour que l'axe se
+// lise d'un coup d'oeil (0, 250, 500, 750, 1 000 plutot que 0, 237, 474...).
+function niceAxis(max) {
+  if (!max || max <= 0) return { step: 1, top: 4 };
+  const raw = max / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(f => f * mag).find(s => s >= raw);
+  return { step, top: step * 4 };
+}
+
+function renderMonthChart() {
+  const el = $('chart-month');
+  const cumul = state.mode === 'cumul';
+  const series = data.by_month.map(m => ({
+    period: m.period,
+    value: cumul ? m.cumulative : m.value,
+    target: cumul ? m.cumulative_target : m.target,
+  }));
+  const max = Math.max(0, ...series.map(s => Math.max(s.value || 0, s.target || 0)));
+  const { step, top } = niceAxis(max);
+  const pctOf = v => Math.max(0, Math.min(100, 100 * (v || 0) / top));
+  const ticks = [0, 1, 2, 3, 4].map(i => i * step);
+
+  el.innerHTML = `
+    <div class="bars">
+      <div class="y-axis" aria-hidden="true">${ticks.map(t => `<span style="bottom:${pctOf(t)}%">${fmtValue(t)}</span>`).join('')}</div>
+      <div class="plot">
+        ${ticks.slice(1).map(t => `<div class="gridline" style="bottom:${pctOf(t)}%"></div>`).join('')}
+        ${series.map(s => {
+          const hit = s.target !== null && s.value !== null && s.value >= s.target && s.target > 0;
+          const tip = `${longMonth(s.period)} — réalisé ${fmtValue(s.value)} / cible ${fmtValue(s.target)}`;
+          return `<div class="month" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}">
+            <div class="bar ${hit ? 'hit' : ''}" style="height:${pctOf(s.value)}%">
+              ${s.value !== null ? `<span class="bar-val">${fmtValue(s.value)}</span>` : ''}
+            </div>
+            ${s.target !== null ? `<div class="target-line" style="bottom:${pctOf(s.target)}%"></div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="x-labels" aria-hidden="true">${series.map(s => `<span>${shortMonth(s.period)}</span>`).join('')}</div>
+    <div class="legend">
+      <span><i class="real"></i>Réalisé${cumul ? ' cumulé' : ''}</span>
+      <span><i class="hit"></i>Cible atteinte</span>
+      <span><i class="target"></i>Cible${cumul ? ' cumulée' : ''}</span>
+    </div>`;
+}
+
+function renderIndicators() {
+  const el = $('chart-indicators');
+  const inds = data.all_indicators || [];
+  el.innerHTML = `<div class="ind-list">${inds.map(i => {
+    const pct = i.calculation === 'percentage';
+    return `<button type="button" class="ind-item" data-id="${esc(i.id)}" aria-current="${i.id === state.indicatorId}">
+      <div class="ind-row">
+        <span class="ind-name">${esc(i.name)}</span>
+        <span class="ind-figs">${fmt(i.value, pct)} / ${fmt(i.target, pct)} · <strong>${fmtRate(i.progress)}</strong></span>
+      </div>
+      ${i.target === null ? '<div class="d-muted">Aucune cible définie</div>' : progressBar(i.progress, i.status)}
+    </button>`;
+  }).join('')}</div>`;
+  el.querySelectorAll('.ind-item').forEach(b => b.addEventListener('click', () => {
+    state.indicatorId = b.dataset.id; load();
+  }));
+}
+
+function renderRegions() {
+  const el = $('chart-region');
+  const rows = data.by_region || [];
+  if (!rows.length || rows.every(r => !r.value)) {
+    el.innerHTML = `<div class="d-empty">${ic('building-2')}Aucune donnée sur la période.</div>`;
+    return;
+  }
+  const max = Math.max(...rows.map(r => r.value || 0)) || 1;
+  el.innerHTML = rows.map(r => `
+    <div class="hbar-row">
+      <span class="hbar-label" title="${esc(r.region)}">${esc(r.region)}</span>
+      <span class="hbar-track"><span style="width:${100 * (r.value || 0) / max}%"></span></span>
+      <span class="hbar-val">${fmtValue(r.value)}${r.share !== null ? ` <span class="d-muted">· ${fmtRate(r.share)}</span>` : ''}</span>
+    </div>`).join('');
+}
+
+function renderPyramid() {
+  const el = $('chart-pyramid');
+  // La tranche la plus agee en haut, comme une pyramide des ages classique ;
+  // "Non renseigne" reste tout en bas, hors de la pyramide proprement dite.
+  const bands = (data.by_age_sex || []).filter(b => b.age_band !== 'nr').reverse();
+  const nr = (data.by_age_sex || []).find(b => b.age_band === 'nr');
+  if (nr) bands.push(nr);
+  const totals = data.age_sex_totals || {};
+  if (!bands.some(b => b.F || b.M || b.NR)) {
+    el.innerHTML = `<div class="d-empty">${ic('users')}Aucune donnée sur la période.</div>`;
+    return;
+  }
+  const max = Math.max(1, ...bands.map(b => Math.max(b.F || 0, b.M || 0)));
+  const w = v => `${85 * (v || 0) / max}%`;
+  el.innerHTML = `
+    <div class="pyr-head"><span class="f">Femmes</span><span style="text-align:center">Âge</span><span>Hommes</span></div>
+    ${bands.map(b => `
+      <div class="pyr-row ${state.age && state.age !== b.age_band ? 'dim' : ''}">
+        <div class="pyr-side f"><span class="v">${fmtValue(b.F)}</span><span class="b" style="width:${w(b.F)}"></span></div>
+        <div class="pyr-band">${esc(b.label)}</div>
+        <div class="pyr-side m"><span class="b" style="width:${w(b.M)}"></span><span class="v">${fmtValue(b.M)}</span></div>
+      </div>`).join('')}
+    <div class="legend">
+      <span><i class="f"></i>Femmes · ${fmtValue(totals.F)}</span>
+      <span><i class="m"></i>Hommes · ${fmtValue(totals.M)}</span>
+      ${totals.NR ? `<span>Sexe non renseigné · ${fmtValue(totals.NR)}</span>` : ''}
+      <span>Les filtres sexe et âge ne s'appliquent pas à ce graphique.</span>
+    </div>`;
+}
+
+function renderSiteTable() {
+  const el = $('site-table');
+  const rows = data.by_site || [];
+  if (!rows.length) {
+    el.innerHTML = `<div class="d-empty">${ic('building-2')}Aucun site défini pour ce projet.${user && user.role === 'admin' ? ' Ajoute-les dans « Configurer ».' : ''}</div>`;
+    return;
+  }
+  const line = (r, cls) => `
+    <tr class="${cls || ''}">
+      <td>${esc(r.site)}</td>
+      <td>${esc(r.region)}</td>
+      <td class="r">${fmtValue(r.F)}</td>
+      <td class="r">${fmtValue(r.M)}</td>
+      <td class="r">${fmtValue(r.value)}</td>
+      <td class="r">${fmtValue(r.target)}</td>
+      <td class="r">${fmtRate(r.progress)}</td>
+      <td>${cls === 'total' ? (r.status ? statusTag(r.status) : '') : statusTag(r.status)}</td>
+    </tr>`;
+  el.innerHTML = `
+    <table class="d-table">
+      <thead><tr><th>Site</th><th>Région</th><th class="r">Femmes</th><th class="r">Hommes</th>
+        <th class="r">Réalisé</th><th class="r">Cible</th><th class="r">Taux d'atteinte</th><th>Statut</th></tr></thead>
+      <tbody>${rows.map(r => line(r)).join('')}${line(data.by_site_total, 'total')}</tbody>
+    </table>`;
+}
+
+// --- Etats vides -------------------------------------------------------------
+function renderNoProject() {
+  $('title-eyebrow').textContent = 'Aucun projet';
+  $('content').innerHTML = `<div class="d-card"><div class="d-empty">${ic('folder')}Aucun projet n'est encore créé. Commence par créer un projet depuis « Tous les projets ».</div></div>`;
+  renderIconSlots();
+}
+function renderNoIndicator() {
+  const admin = user && user.role === 'admin';
+  $('content').innerHTML = `<div class="d-card"><div class="d-empty">${ic('bar-chart-3')}
+    Aucun indicateur n'est défini pour ce projet.
+    ${admin ? `<div style="margin-top:var(--space-4)"><a class="btn btn-primary" href="/indicateurs.html?project_id=${encodeURIComponent(state.projectId)}">${ic('plus')} Définir les indicateurs</a></div>`
+            : '<br>Demande à un administrateur de les définir.'}
+  </div></div>`;
+}
+function renderOffline() {
+  $('content').innerHTML = `<div class="d-card"><div class="d-empty">${ic('circle-alert')}
+    Le tableau de bord se calcule sur le serveur : il n'est pas disponible hors connexion.
+    Reconnecte-toi au réseau du bureau puis recharge la page.</div></div>`;
+}
+
+// --- Exports -----------------------------------------------------------------
+$('btn-pdf').addEventListener('click', () => window.print());
+$('btn-xlsx').addEventListener('click', async () => {
+  const btn = $('btn-xlsx');
+  btn.disabled = true;
+  try {
+    // fetch + blob plutot qu'un simple lien : en cas d'erreur, on affiche le
+    // message au lieu d'ouvrir une page de texte brut.
+    const res = await fetch(apiQuery({ format: 'xlsx' }), { credentials: 'same-origin' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      showError(body.detail || "L'export n'a pas abouti. Réessaie dans un instant.");
+      return;
+    }
+    const blob = await res.blob();
+    const match = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = match ? match[1] : 'tableau_de_bord.xlsx';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) {
+    showError("Pas de connexion au serveur : l'export est impossible pour l'instant.");
+  } finally {
+    btn.disabled = !(data && data.indicator);
+  }
+});
+
+// --- Demarrage ---------------------------------------------------------------
+(async function init() {
+  user = await initAppShell(state.projectId || null);
+  syncPeriodButtons();
+  bindFilters();
+  if (!user) { renderOffline(); return; }
+  const res = await fetch('/api/donors', { credentials: 'same-origin' }).catch(() => null);
+  if (!res || !res.ok) { renderOffline(); return; }
+  donors = await res.json();
+  if (!donors.length) { renderNoProject(); return; }
+
+  // Le projet de l'URL l'emporte : il determine son bailleur. Sinon, le
+  // bailleur de l'URL et son premier projet ; sinon le tout premier.
+  let d = state.projectId && donors.find(x => x.projects.some(p => p.id === state.projectId));
+  if (!d) {
+    d = donors.find(x => x.name === state.donor) || donors[0];
+    state.projectId = d.projects[0].id;
+  }
+  state.donor = d.name;
+  fillDonors();
+  fillProjects();
+  load();
+})();
+</script>
+</body>
+</html>

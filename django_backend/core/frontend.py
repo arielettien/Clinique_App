@@ -12,6 +12,11 @@ from pathlib import Path
 from django.conf import settings
 from django.http import FileResponse, Http404
 
+# Polices hebergees localement (frontend/fonts/, tableau de bord) : la table
+# des types de Python ne connait pas .woff2 et les servirait en
+# application/octet-stream.
+mimetypes.add_type("font/woff2", ".woff2")
+
 
 def serve_frontend(request, path=""):
     base = Path(settings.FRONTEND_DIR).resolve()

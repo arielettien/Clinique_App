@@ -311,6 +311,7 @@ async function initAppShell(activeProjectId) {
         <a class="nav-link ${!activeProjectId ? 'active' : ''}" href="/">${ic('folder')} Tous les projets</a>
         <a class="nav-link" href="/patients.html">${ic('users')} Patients</a>
         <a class="nav-link" href="/tableur.html">${ic('file-spreadsheet')} Tableur</a>
+        <a class="nav-link" href="/tableau_de_bord.html">${ic('layout-dashboard')} Tableau de bord</a>
         <button type="button" id="projects-toggle" class="nav-section-toggle" aria-expanded="${projectsExpanded ? 'true' : 'false'}">
           <span>Projets</span>
           <span class="toggle-chevron">${ic(projectsExpanded ? 'chevron-up' : 'chevron-down')}</span>

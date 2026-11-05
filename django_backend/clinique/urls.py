@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/", include("community.urls")),
     path("api/", include("spreadsheets.urls")),
     path("api/", include("workbooks.urls")),
+    path("api/", include("indicators.urls")),
     path("api/", include("core.urls")),
 
     # A la racine, et non sous /api/ : c'est l'adresse que le stockage

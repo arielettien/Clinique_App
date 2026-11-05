@@ -1,0 +1,168 @@
+/* Direction visuelle du tableau de bord des indicateurs (Barlow, bleu acier).
+
+   Volontairement limitee aux pages qui chargent cette feuille
+   (tableau_de_bord.html et indicateurs.html) : le reste de l'application
+   garde le systeme de style.css. Tout est defini en variables ici, une seule
+   fois — les pages n'ecrivent aucune couleur en dur.
+
+   Les polices sont hebergees localement (dossier fonts/, licence OFL) et non
+   chargees depuis Google : un ecran consulte en reunion, parfois sans
+   internet, doit garder sa typographie. */
+
+@font-face { font-family: 'Barlow'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 500; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 600; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 500; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-condensed-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 600; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-condensed-latin-600-normal.woff2') format('woff2'); }
+
+body.dash {
+  --d-bg: #f2f2f3;
+  --d-ink: #1d1f20;
+  /* Gris neutre derive de l'encre (pas une couleur decorative) : reste
+     lisible au soleil, comme --ink-muted dans style.css. */
+  --d-ink-muted: #55595c;
+  --d-line: rgba(29, 31, 32, .16);
+  --d-line-soft: rgba(29, 31, 32, .08);
+  --d-accent: #5980a6;
+  --d-accent-100: #eef6ff;
+  --d-accent-400: #94bce3;
+  --d-accent-500: #749dc4;
+  --d-accent-600: #597ea3;
+  --d-accent-700: #416180;
+  --d-accent-800: #2c455d;
+  --d-font-title: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --d-font-body: 'Barlow', system-ui, sans-serif;
+
+  /* Les composants communs (barre laterale, boutons, champs) lisent ces
+     variables de style.css : on les realigne sur la direction de la page. */
+  --bg: var(--d-bg);
+  --surface: var(--d-bg);
+  --ink: var(--d-ink);
+  --ink-muted: var(--d-ink-muted);
+  --ink-faint: var(--d-ink-muted);
+  --border: var(--d-line);
+  --border-strong: rgba(29, 31, 32, .32);
+  --primary: var(--d-accent-600);
+  --primary-dark: var(--d-accent-700);
+  --primary-soft: var(--d-accent-100);
+  --font-body: var(--d-font-body);
+  --font-display: var(--d-font-title);
+
+  background: var(--d-bg);
+  color: var(--d-ink);
+  font-family: var(--d-font-body);
+  font-size: 0.9375rem;
+}
+
+body.dash .icon { stroke-width: 1.5; }
+body.dash h1, body.dash h2, body.dash h3 { font-family: var(--d-font-title); font-weight: 600; letter-spacing: .01em; }
+body.dash .app-sidebar { background: var(--d-bg); }
+
+/* Boutons : carres, le principal plein en couleur d'accent. */
+body.dash .btn { border-radius: 0; font-weight: 500; white-space: nowrap; }
+body.dash .btn-primary { background: var(--d-accent-600); color: #fff; }
+body.dash .btn-primary:hover { background: var(--d-accent-700); }
+body.dash .btn-ghost { background: transparent; color: var(--d-ink); border: 1px solid var(--d-line); }
+body.dash .btn-ghost:hover { background: var(--d-accent-100); }
+body.dash select, body.dash input, body.dash textarea { border-radius: 0; background: transparent; }
+
+/* Carte : carree, transparente, filet fin, reperes "+" aux quatre coins.
+   Les quatre croix tiennent dans UN seul pseudo-element, dessinees par huit
+   degrades nets (un trait de 1 px chacun) : un pseudo-element par coin en
+   demanderait quatre, alors qu'un element n'en a que deux. */
+.d-card {
+  position: relative;
+  border: 1px solid var(--d-line);
+  background: transparent;
+  padding: var(--space-5);
+  min-width: 0;
+}
+.d-card::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  pointer-events: none;
+  /* Quatre croix de 9 px, une par coin : deux traits de 1 px chacune. */
+  background:
+    linear-gradient(var(--d-ink), var(--d-ink)) left 4px top 0 / 1px 9px,
+    linear-gradient(var(--d-ink), var(--d-ink)) left 0 top 4px / 9px 1px,
+    linear-gradient(var(--d-ink), var(--d-ink)) right 4px top 0 / 1px 9px,
+    linear-gradient(var(--d-ink), var(--d-ink)) right 0 top 4px / 9px 1px,
+    linear-gradient(var(--d-ink), var(--d-ink)) left 4px bottom 0 / 1px 9px,
+    linear-gradient(var(--d-ink), var(--d-ink)) left 0 bottom 4px / 9px 1px,
+    linear-gradient(var(--d-ink), var(--d-ink)) right 4px bottom 0 / 1px 9px,
+    linear-gradient(var(--d-ink), var(--d-ink)) right 0 bottom 4px / 9px 1px;
+  background-repeat: no-repeat;
+}
+.d-card-title {
+  font-family: var(--d-font-title);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-4) 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.d-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--d-ink-muted);
+}
+.d-muted { color: var(--d-ink-muted); font-size: 0.85rem; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Etiquettes de statut : distinguees par la forme autant que par la teinte
+   (plein / clair / contour + icone), pour rester lisibles en impression noir
+   et blanc et sans dependre de la perception des couleurs. */
+.d-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px var(--space-2);
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.d-status.reached { background: var(--d-accent-700); color: #fff; }
+.d-status.on_track { background: var(--d-accent-100); color: var(--d-accent-800); border-color: var(--d-accent-400); }
+.d-status.late { background: transparent; color: var(--d-ink); border-color: var(--d-ink); }
+
+.d-progress { height: 6px; background: var(--d-line-soft); position: relative; overflow: hidden; }
+.d-progress > span { position: absolute; inset: 0 auto 0 0; background: var(--d-accent-500); }
+.d-progress.reached > span { background: var(--d-accent-700); }
+
+/* Tableau sobre : filets horizontaux seulement. */
+.d-table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+.d-table th {
+  text-align: left; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--d-ink-muted); padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--d-line); white-space: nowrap;
+}
+.d-table td { padding: var(--space-3); border-bottom: 1px solid var(--d-line-soft); vertical-align: middle; }
+.d-table .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.d-table tr.total td { font-weight: 600; border-top: 1px solid var(--d-ink); border-bottom: none; }
+
+.d-empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--d-ink-muted);
+}
+.d-empty .icon { width: 28px; height: 28px; display: block; margin: 0 auto var(--space-2); }
+
+.d-error {
+  border: 1px solid var(--d-ink);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  display: flex; gap: var(--space-2); align-items: flex-start;
+}
