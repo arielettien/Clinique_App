@@ -18,7 +18,8 @@ from clinical_forms.services import (
 from core.audit import log_audit
 from core.form_import_validation import validate_form_definition
 from core.permissions import IsAdmin
-from core.spreadsheet_io import build_template_bytes, parse_spreadsheet_to_sections, slugify_py
+from core.form_import_formats import expliquer_echec, lire_structure
+from core.spreadsheet_io import build_template_bytes, slugify_py
 from projects.models import Project
 from submissions.models import Submission
 
@@ -194,17 +195,20 @@ def import_form(request):
 
     content = uploaded.read()
     try:
-        sections, choice_lists = parse_spreadsheet_to_sections(content, uploaded.name or "formulaire.xlsx")
+        # Reconnait le format tout seul (notre modele, export Kobo, colonnes
+        # en francais...) : voir core/form_import_formats.py pour le pourquoi.
+        sections, choice_lists, rapport = lire_structure(content, uploaded.name or "formulaire.xlsx")
     except Exception as e:  # noqa: BLE001 — message remonte tel quel a l'agent
         return Response({"detail": f"Impossible de lire le fichier : {e}"},
                         status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
     total_fields = sum(len(s.get("fields", [])) for s in sections)
     if total_fields == 0:
-        return Response(
-            {"detail": "Aucune question valide trouvee (verifie que la colonne 'label' est bien remplie)."},
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
+        # Dire ce qui a ete VU (feuilles, colonnes), pas seulement ce qui
+        # etait attendu : l'ancien message envoyait verifier le contenu d'une
+        # colonne qui, en realite, n'existait pas sous ce nom.
+        return Response({"detail": expliquer_echec(rapport)},
+                        status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
     definition = {"sections": sections}
     if choice_lists:
@@ -220,5 +224,8 @@ def import_form(request):
 
     form = Form.objects.create(project_id=project_id, name=name,
                                form_type="survey", definition=definition)
-    return Response({"id": form.id, "name": form.name, "questions_imported": total_fields},
+    # Les avertissements remontent jusqu'a l'agent : ce qui a ete adapte,
+    # retire ou invente pendant la conversion ne doit pas rester silencieux.
+    return Response({"id": form.id, "name": form.name, "questions_imported": total_fields,
+                     "format": rapport["format"], "avertissements": rapport["avertissements"]},
                     status=status.HTTP_201_CREATED)

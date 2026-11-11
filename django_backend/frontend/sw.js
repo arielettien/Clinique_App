@@ -15,13 +15,13 @@
 // depuis le cache et personne ne voit la mise a jour.
 // v9 : tableau de bord des indicateurs (nouvelles pages, feuille de style et
 // polices Barlow hebergees localement).
-const CACHE_NAME = 'clinique-app-shell-v9';
+const CACHE_NAME = 'clinique-app-shell-v10';
 const APP_SHELL_FILES = [
   '/', '/login.html', '/style.css', '/style_blanc_bleu.css', '/app_shell.js', '/icons.js', '/dexie.min.js', '/offline_db.js',
   '/index.html', '/project_hub.html', '/survey.html', '/follow_up.html',
   '/case_detail.html', '/history.html', '/submission.html', '/form_data.html',
   '/form_builder.html', '/users.html', '/audit_log.html', '/community.html', '/patients.html',
-  '/spreadsheets.html', '/tableur.html', '/tableur_engine.js',
+  '/spreadsheets.html', '/tableur.html', '/tableur_engine.js', '/importer_etude.html',
   '/tableau_de_bord.html', '/tableau_de_bord.css', '/indicateurs.html',
   '/fonts/barlow-latin-400-normal.woff2', '/fonts/barlow-latin-500-normal.woff2',
   '/fonts/barlow-latin-600-normal.woff2', '/fonts/barlow-condensed-latin-500-normal.woff2',

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Importer une étude — Clinique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+  h1 { display: flex; align-items: center; gap: var(--space-2); }
+  .etape { margin-bottom: var(--space-6); }
+  .etape h2 { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .numero { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; align-items: center; justify-content: center;
+            background: var(--primary); color: #fff; font-size: 0.85rem; font-weight: 700; }
+  .ligne-champs { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end; }
+  .ligne-champs label { display: block; font-weight: 600; margin-bottom: var(--space-1); }
+  .ligne-champs input[type=text] { min-width: 280px; }
+  .resume { display: flex; gap: var(--space-5); flex-wrap: wrap; margin-bottom: var(--space-4); }
+  .resume div { font-size: 0.9rem; color: var(--ink-muted); }
+  .resume strong { display: block; font-size: 1.5rem; color: var(--ink); }
+  .data-table select { min-height: var(--cible-tactile); max-width: 190px; }
+  .apercu { color: var(--ink-faint); font-size: 0.8125rem; }
+  .options { color: var(--ink-muted); font-size: 0.8125rem; margin-top: 2px; }
+  .avert { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; padding: 12px 16px; border-radius: var(--radius-md); margin: var(--space-3) 0; font-size: 0.9rem; }
+  .avert ul, .erreurs ul { margin: var(--space-2) 0 0 var(--space-4); }
+  .erreurs { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); margin: var(--space-3) 0; font-size: 0.9rem; }
+  .succes { background: #DCFCE7; border: 1px solid #86EFAC; color: #15803D; padding: 12px 16px; border-radius: var(--radius-md); margin: var(--space-3) 0; }
+  .actions { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-4); }
+  .hidden { display: none; }
+  .role-identite { background: var(--bleu-pale, #EFF4FF); }
+</style>
+  <!-- Theme « blanc et bleu », place APRES le <style> de la page pour l'emporter. -->
+  <link rel="stylesheet" href="/style_blanc_bleu.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="app-sidebar" id="app-sidebar-slot"></aside>
+  <main class="app-main">
+
+    <div class="breadcrumb"><a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="#">Projet</a> / <span>Importer une étude</span></div>
+    <h1><span class="icon-slot" data-icon="file-spreadsheet"></span> Importer une étude déjà réalisée</h1>
+    <p style="color:var(--ink-muted); margin-bottom:var(--space-5);">
+      Pour une étude terminée ailleurs (Google Forms, Kobo…) dont tu as le fichier Excel des réponses : une ligne par personne,
+      une colonne par question. L'application en tire le questionnaire <em>et</em> les fiches. Rien n'est enregistré avant
+      l'étape 3, et l'étape 2 te laisse corriger ce qu'elle a deviné.
+    </p>
+
+    <div id="error-box" class="erreurs hidden"></div>
+
+    <!-- Etape 1 : fichier et nom -->
+    <section class="card etape" id="etape-1">
+      <h2><span class="numero">1</span> Le fichier</h2>
+      <div class="ligne-champs">
+        <div>
+          <label for="nom-etude">Nom de l'étude (deviendra le nom du formulaire)</label>
+          <input type="text" id="nom-etude" placeholder="ex : Dépistage HPV 2025">
+        </div>
+        <div>
+          <label for="fichier">Fichier Excel ou CSV des réponses</label>
+          <input type="file" id="fichier" accept=".xlsx,.xls,.csv">
+        </div>
+        <button class="btn btn-primary" id="btn-analyser" onclick="analyser()">Analyser le fichier</button>
+      </div>
+      <p class="apercu" style="margin-top:var(--space-3);">Si le fichier contient deux questionnaires côte à côte (colonnes en double avec un suffixe), coupe-le d'abord en deux fichiers dans Excel : un fichier = un questionnaire.</p>
+    </section>
+
+    <!-- Etape 2 : verification -->
+    <section class="card etape hidden" id="etape-2">
+      <h2><span class="numero">2</span> Vérifier ce que l'application a compris</h2>
+      <div class="resume">
+        <div><strong id="r-lignes">–</strong>lignes de réponses</div>
+        <div><strong id="r-questions">–</strong>questions</div>
+        <div><strong id="r-identite">–</strong>colonnes d'identité</div>
+      </div>
+      <div id="avert-analyse" class="avert hidden"></div>
+      <p class="apercu" style="margin-bottom:var(--space-3);">
+        <b>Rôle</b> : une colonne d'identité (prénom, nom, téléphone…) devient le patient ; une <i>question</i> devient une question du formulaire ;
+        <i>ignorer</i> l'écarte. <b>Type</b> : deviné d'après les valeurs — corrige si besoin.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="data-table" id="table-colonnes">
+          <thead><tr><th>Colonne du fichier</th><th>Rôle</th><th>Type</th><th>Aperçu des valeurs</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-blanc" onclick="importer(true)">Vérifier sans rien enregistrer</button>
+        <button class="btn btn-ghost" onclick="recommencer()">Changer de fichier</button>
+      </div>
+    </section>
+
+    <!-- Etape 3 : rapport et import -->
+    <section class="card etape hidden" id="etape-3">
+      <h2><span class="numero">3</span> Rapport</h2>
+      <div id="rapport"></div>
+      <div class="actions">
+        <button class="btn btn-primary hidden" id="btn-import" onclick="importer(false)">Importer pour de bon</button>
+        <a class="btn btn-secondary hidden" id="lien-donnees" href="#">Voir les données</a>
+        <a class="btn btn-secondary hidden" id="lien-patients" href="#">Voir les patients</a>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="/app_shell.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const projectId = params.get('project_id');
+
+const ROLES = [
+  ['question', 'Question'], ['prenom', 'Prénom du patient'], ['nom', 'Nom du patient'],
+  ['code', 'Code patient'], ['telephone', 'Téléphone'], ['sexe', 'Sexe'],
+  ['date_naissance', 'Date de naissance'], ['annee_naissance', 'Année de naissance'],
+  ['date_collecte', 'Date de collecte'], ['ignorer', 'Ignorer'],
+];
+const TYPES = [
+  ['text', 'Texte'], ['number', 'Nombre entier'], ['decimal', 'Nombre décimal'], ['date', 'Date'],
+  ['select_one', 'Choix unique'], ['select_multiple', 'Choix multiples'],
+];
+
+let fichierCourant = null;   // conservé pour être renvoyé avec la proposition corrigée
+let proposition = null;      // ce que le serveur a deviné, puis ce que l'agent a corrigé
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function montrerErreur(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = msg; box.classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function cacherErreur() { document.getElementById('error-box').classList.add('hidden'); }
+
+function extraireErreur(data, defaut) {
+  if (!data) return defaut;
+  if (typeof data.detail === 'string') return data.detail;
+  if (data.detail && data.detail.msg) return data.detail.msg;
+  return defaut;
+}
+
+async function analyser() {
+  cacherErreur();
+  const input = document.getElementById('fichier');
+  const f = input.files[0];
+  if (!f) { montrerErreur('Choisis d\'abord un fichier.'); return; }
+  fichierCourant = f;
+  const nom = document.getElementById('nom-etude');
+  if (!nom.value.trim()) nom.value = f.name.replace(/\.[^/.]+$/, '');
+
+  const btn = document.getElementById('btn-analyser');
+  btn.disabled = true; btn.textContent = 'Analyse…';
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('project_id', projectId);
+  try {
+    const res = await fetch('/api/etudes/analyser', { method: 'POST', credentials: 'same-origin', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { montrerErreur(extraireErreur(data, 'Analyse impossible.')); return; }
+    proposition = data;
+    afficherProposition();
+  } catch (e) {
+    montrerErreur('Le serveur ne répond pas : ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analyser le fichier';
+  }
+}
+
+function afficherProposition() {
+  document.getElementById('etape-2').classList.remove('hidden');
+  document.getElementById('etape-3').classList.add('hidden');
+  document.getElementById('btn-import').classList.add('hidden');
+  const tbody = document.querySelector('#table-colonnes tbody');
+  tbody.innerHTML = '';
+  proposition.colonnes.forEach((c, i) => {
+    const tr = document.createElement('tr');
+    tr.dataset.index = i;
+    tr.innerHTML = `
+      <td><b>${escapeHtml(c.entete)}</b><div class="apercu">${c.remplies} remplie(s), ${c.distinctes} valeur(s) distincte(s)</div></td>
+      <td><select data-champ="role" aria-label="Rôle de ${escapeHtml(c.entete)}">${ROLES.map(([v, l]) => `<option value="${v}" ${v === c.role ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+      <td><select data-champ="type" aria-label="Type de ${escapeHtml(c.entete)}" ${c.role !== 'question' ? 'disabled' : ''}>${TYPES.map(([v, l]) => `<option value="${v}" ${v === c.type ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <div class="options">${optionsTexte(c)}</div></td>
+      <td class="apercu">${c.exemples.map(escapeHtml).join(' · ') || '—'}</td>`;
+    tr.querySelector('[data-champ=role]').addEventListener('change', e => {
+      c.role = e.target.value;
+      tr.querySelector('[data-champ=type]').disabled = c.role !== 'question';
+      tr.classList.toggle('role-identite', c.role !== 'question' && c.role !== 'ignorer');
+      majResume();
+    });
+    tr.querySelector('[data-champ=type]').addEventListener('change', e => {
+      c.type = e.target.value;
+      tr.querySelector('.options').textContent = optionsTexte(c);
+    });
+    tr.classList.toggle('role-identite', c.role !== 'question' && c.role !== 'ignorer');
+    tbody.appendChild(tr);
+  });
+  const avert = document.getElementById('avert-analyse');
+  if (proposition.avertissements.length) {
+    avert.innerHTML = '<b>À noter :</b><ul>' + proposition.avertissements.map(a => `<li>${escapeHtml(a)}</li>`).join('') + '</ul>';
+    avert.classList.remove('hidden');
+  } else avert.classList.add('hidden');
+  majResume();
+  document.getElementById('etape-2').scrollIntoView({ behavior: 'smooth' });
+}
+
+function optionsTexte(c) {
+  if (c.role !== 'question' || !['select_one', 'select_multiple'].includes(c.type) || !c.options.length) return '';
+  return 'Options : ' + c.options.map(o => o.label).join(', ');
+}
+
+function majResume() {
+  const cols = proposition.colonnes;
+  document.getElementById('r-lignes').textContent = proposition.lignes;
+  document.getElementById('r-questions').textContent = cols.filter(c => c.role === 'question').length;
+  document.getElementById('r-identite').textContent = cols.filter(c => c.role !== 'question' && c.role !== 'ignorer').length;
+}
+
+async function importer(aBlanc) {
+  cacherErreur();
+  if (!fichierCourant || !proposition) return;
+  const nom = document.getElementById('nom-etude').value.trim();
+  if (!nom) { montrerErreur('Donne un nom à l\'étude.'); return; }
+  const btn = document.getElementById(aBlanc ? 'btn-blanc' : 'btn-import');
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('file', fichierCourant);
+  fd.append('project_id', projectId);
+  fd.append('nom', nom);
+  fd.append('a_blanc', aBlanc ? '1' : '0');
+  fd.append('colonnes', JSON.stringify(proposition.colonnes));
+  try {
+    const res = await fetch('/api/etudes/importer', { method: 'POST', credentials: 'same-origin', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { montrerErreur(extraireErreur(data, 'Import impossible.')); return; }
+    afficherRapport(data);
+  } catch (e) {
+    montrerErreur('Le serveur ne répond pas : ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function afficherRapport(r) {
+  const zone = document.getElementById('rapport');
+  const titre = r.a_blanc ? 'Simulation — rien n\'a été enregistré' : 'Import terminé';
+  let html = `<div class="${r.a_blanc ? 'avert' : 'succes'}"><b>${titre}</b></div>`;
+  html += `<div class="resume">
+    <div><strong>${r.fiches}</strong>fiche(s) ${r.a_blanc ? 'à créer' : 'créée(s)'}</div>
+    <div><strong>${r.patients_crees}</strong>patient(s) ${r.a_blanc ? 'à créer' : 'créé(s)'}</div>
+    <div><strong>${r.patients_existants}</strong>patient(s) déjà connu(s), réutilisé(s)</div>
+    <div><strong>${r.deja_enregistrees}</strong>ligne(s) déjà importée(s), ignorée(s)</div>
+    <div><strong>${r.erreurs.length}</strong>ligne(s) refusée(s)</div>
+  </div>`;
+  if (r.formulaire) {
+    html += `<p>Formulaire <b>${escapeHtml(r.formulaire.nom)}</b> — ${r.formulaire.questions} question(s)${r.formulaire.existant ? ' (formulaire existant, complété)' : ''}.</p>`;
+  }
+  if (r.erreurs.length) {
+    html += `<div class="erreurs"><b>Lignes refusées</b> (numéro de ligne dans Excel) — corrige-les dans le fichier et relance, les lignes déjà importées ne seront pas dupliquées :<ul>`
+          + r.erreurs.map(e => `<li>Ligne ${e.ligne} : ${escapeHtml(e.message)}</li>`).join('') + '</ul></div>';
+  }
+  if (r.avertissements.length) {
+    html += '<div class="avert"><b>À noter :</b><ul>' + r.avertissements.slice(0, 30).map(a => `<li>${escapeHtml(a)}</li>`).join('')
+          + (r.avertissements.length > 30 ? `<li>… et ${r.avertissements.length - 30} autre(s)</li>` : '') + '</ul></div>';
+  }
+  zone.innerHTML = html;
+
+  const btnImport = document.getElementById('btn-import');
+  const lienDonnees = document.getElementById('lien-donnees');
+  const lienPatients = document.getElementById('lien-patients');
+  if (r.a_blanc) {
+    btnImport.classList.toggle('hidden', r.fiches === 0);
+    lienDonnees.classList.add('hidden'); lienPatients.classList.add('hidden');
+  } else {
+    btnImport.classList.add('hidden');
+    lienDonnees.href = `/form_data.html?project_id=${projectId}&form_id=${r.formulaire.id}`;
+    lienPatients.href = `/patients.html?project_id=${projectId}`;
+    lienDonnees.classList.remove('hidden'); lienPatients.classList.remove('hidden');
+  }
+  document.getElementById('etape-3').classList.remove('hidden');
+  document.getElementById('etape-3').scrollIntoView({ behavior: 'smooth' });
+}
+
+function recommencer() {
+  proposition = null; fichierCourant = null;
+  document.getElementById('fichier').value = '';
+  document.getElementById('etape-2').classList.add('hidden');
+  document.getElementById('etape-3').classList.add('hidden');
+  cacherErreur();
+}
+
+(async () => {
+  if (!projectId) {
+    document.querySelector('.app-main').innerHTML = '<p>Aucun projet sélectionné. <a href="/">Retour</a></p>';
+    return;
+  }
+  document.getElementById('breadcrumb-project').href = `/project_hub.html?project_id=${projectId}`;
+  const projRes = await fetch(`/api/projects/${projectId}`, { credentials: 'same-origin' }).catch(() => null);
+  if (projRes && projRes.ok) {
+    const project = await projRes.json();
+    document.getElementById('breadcrumb-project').textContent = project.name;
+  }
+  try { await initAppShell(projectId); } catch (e) { console.warn('initAppShell non disponible', e); }
+})();
+</script>
+</body>
+</html>

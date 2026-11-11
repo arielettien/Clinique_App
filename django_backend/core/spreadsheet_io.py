@@ -207,22 +207,26 @@ def row_to_field(row: dict, used_ids: set) -> dict | None:
 
 def parse_spreadsheet_to_sections(content: bytes, filename: str):
     """Lit un fichier CSV/Excel et le transforme en (sections, choice_lists).
+
+    Conservée pour les appels existants : tout passe désormais par
+    core.form_import_formats, qui reconnaît le format du fichier (modèle de
+    l'application, export Kobo/XLSForm, colonnes en français...) avant de
+    confier les lignes normalisées à rows_to_sections() ci-dessous."""
+    from core.form_import_formats import lire_structure  # import tardif : ce module nous importe
+
+    sections, choice_lists, _rapport = lire_structure(content, filename)
+    return sections, choice_lists
+
+
+def rows_to_sections(rows: list) -> list:
+    """Transforme des lignes DÉJÀ normalisées (clés = colonnes du modèle de
+    l'application : id/type/label/...) en liste de sections.
+
     Reconnaît les lignes begin_group / end_group (convention XLSForm de Kobo)
     pour délimiter les groupes, avec la condition d'affichage de la section
     dans la colonne "relevant" du begin_group. Un fichier sans ces marqueurs
     (les anciens exports, ou un fichier tout simple) donne une seule section
-    par défaut — pleinement rétrocompatible. La feuille "Choices" (Excel
-    uniquement) alimente les listes de choix réutilisables."""
-    is_csv = filename.lower().endswith(".csv")
-    if is_csv:
-        df = pd.read_csv(BytesIO(content), sep=None, engine="python")
-        choice_lists = {}
-    else:
-        df = pd.read_excel(BytesIO(content), sheet_name="Structure") if _has_sheet(content, "Structure") else pd.read_excel(BytesIO(content))
-        choice_lists = _parse_choices_sheet(content)
-
-    df.columns = [str(c).strip().lower() for c in df.columns]
-
+    par défaut — pleinement rétrocompatible."""
     used_ids: set = set()
     sections = []
     section_counter = 1
@@ -231,9 +235,8 @@ def parse_spreadsheet_to_sections(content: bytes, filename: str):
         return {"id": "main", "title": "Questions", "fields": []}
 
     current_section = new_default_section()
-    current_relevant = ""
 
-    for row in df.to_dict(orient="records"):
+    for row in rows:
         row_type = _clean(row.get("type")).lower()
 
         if row_type == "begin_group":
@@ -262,7 +265,7 @@ def parse_spreadsheet_to_sections(content: bytes, filename: str):
     if not sections:
         sections = [new_default_section()]
 
-    return sections, choice_lists
+    return sections
 
 
 def _has_sheet(content: bytes, sheet_name: str) -> bool:

@@ -110,6 +110,28 @@ is real business logic — a `services.py` kept separate from the HTTP layer.
   - `form_validation.py` — server-side re-validation of a submission against its form's JSON `definition`.
     Never trusts client-side calculation: recomputes every `calculated` field itself.
   - `form_import_validation.py`, `spreadsheet_io.py` — imported form structure validation, and Excel/CSV IO.
+  - `form_import_formats.py` — format detection for a form-structure import. The NGO's questionnaires are
+    authored in Kobo Toolbox, so `/api/forms/import` must accept an XLSForm export (`survey` + `choices`
+    sheets, `label::Langue` columns, `select_one list` types, `${x} = 'v'` expressions) as well as the
+    app's own template and French column headers; everything is normalised to the template's columns
+    before `spreadsheet_io.rows_to_sections`. Anything adapted, dropped or invented during conversion is
+    returned as `avertissements` and shown to the user — never silent on a medical form. When nothing is
+    recognised, `expliquer_echec` reports the sheets and columns actually seen, not just what was expected.
+  - `etude_import.py` — import of an already-completed study from its *answers* file (Google Forms / Kobo
+    data export: one row per respondent, one column per question). The header row becomes the form, the
+    rows become patients + submissions. Framework-free: `analyser()` proposes a role per column (identity
+    columns — prénom/nom/code/téléphone/sexe/naissance/date de collecte — become the `Patient`; the rest are
+    questions whose type is inferred from the *values*, with Google checkbox grids `Q [opt]` folded into one
+    `select_multiple`), `construire_definition()` and `preparer_ligne()` do the mapping. HTTP side is
+    `clinical_forms/etudes.py` (`/api/etudes/analyser`, `/api/etudes/importer`, admin-only): stateless
+    two-step (the file is re-sent with the corrected proposal), `a_blanc=1` runs everything inside a
+    rolled-back transaction and returns the exact report. Every row goes through
+    `validate_and_process_submission` like a manual entry; a refused row is reported with its Excel line
+    number and skipped, the others go in. Idempotency key per row (`etude:` + sha256 of project, study name,
+    row content) makes re-running the same file safe. Decisions baked in: form type is always `survey`, a
+    year-only birth date becomes 1 July, a missing name becomes "Patient <code>", one file = one
+    questionnaire (a sheet holding two questionnaires side by side must be split in Excel first). Audit-logged
+    as `create` / `study`.
 
 ### Frontend (`django_backend/frontend/`)
 
@@ -133,6 +155,9 @@ talks to the API in JSON and is unchanged from the previous version apart from t
   offline, keyed by a client-generated `idempotency_key`. Polls `/health` to detect connectivity — that
   route is mounted at the root, not under `/api/`, and must stay there.
 - `icons.js` — locally-hosted Lucide icon set (no CDN, so icons still render offline).
+- `importer_etude.html` — three-step wizard for `core/etude_import.py` (file → check/correct the guessed
+  roles and types in a table → dry-run report → real import, with links to the data and the patients).
+  Reached from the Enquête page. Needs the server; the file is kept in memory client-side between steps.
 
 ### Cross-cutting patterns worth knowing before changing API behavior
 

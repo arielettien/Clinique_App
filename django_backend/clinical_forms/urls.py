@@ -1,10 +1,14 @@
 from django.urls import path
 
-from clinical_forms import exports, views
+from clinical_forms import etudes, exports, views
 
 urlpatterns = [
     path("forms", views.forms_collection),
     path("forms/import", views.import_form),
+    # Etude deja realisee (questionnaire + reponses dans un meme fichier) :
+    # analyse a l'ecran, puis import — a blanc d'abord, pour de bon ensuite.
+    path("etudes/analyser", etudes.analyser_etude),
+    path("etudes/importer", etudes.importer_etude),
     path("forms/<str:form_id>", views.form_detail),
     path("forms/<str:form_id>/public-link", views.public_link),
     path("forms/<str:form_id>/public-link/regenerate", views.regenerate_public_code),

@@ -7,13 +7,20 @@ reprise de donnees antidatees, idempotence de la file d'attente hors-ligne,
 attribution des codes et numeros, cloisonnement des droits, et acces
 communautaire sans compte.
 """
+import json
+from io import BytesIO
+
+import pandas as pd
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 
 from accounts.models import User
 from cases.models import Case
 from clinical_forms.models import Form
+from core.models import AuditLog
 from patients.models import Patient
 from projects.models import Project
+from submissions.models import Submission
 
 FORM_DEFINITION = {
     "sections": [{
@@ -419,6 +426,264 @@ class FormTests(BaseApiTest):
         response = self.client.delete(f"/api/forms/{self.form['id']}")
         self.assertEqual(response.json()["status"], "deleted")
         self.assertFalse(Form.objects.filter(pk=self.form["id"]).exists())
+
+
+class ImportStructureTests(BaseApiTest):
+    """L'import doit reconnaitre le format du fichier tout seul : les
+    questionnaires de l'ONG naissent dans Kobo, pas dans notre modele, et
+    personne sur place ne peut les convertir a la main."""
+
+    def setUp(self):
+        super().setUp()
+        self.project = self.create_project()
+
+    def _xlsx(self, feuilles: dict) -> bytes:
+        tampon = BytesIO()
+        with pd.ExcelWriter(tampon, engine="openpyxl") as w:
+            for nom, lignes in feuilles.items():
+                pd.DataFrame(lignes).to_excel(w, sheet_name=nom, index=False)
+        return tampon.getvalue()
+
+    def _importer(self, contenu: bytes, nom="fichier.xlsx"):
+        return self.client.post(
+            "/api/forms/import",
+            {"project_id": self.project["id"], "name": "Importe",
+             "file": SimpleUploadedFile(nom, contenu)})
+
+    def _champs(self, form_id):
+        definition = Form.objects.get(pk=form_id).definition
+        return {f["id"]: f for s in definition["sections"] for f in s["fields"]}, definition
+
+    def test_modele_de_l_application(self):
+        contenu = self._xlsx({"Structure": [
+            {"id": "poids", "type": "number", "label": "Poids (kg)", "required": "oui", "min": 1, "max": 200},
+        ]})
+        reponse = self._importer(contenu)
+        self.assertEqual(reponse.status_code, 201, reponse.content)
+        self.assertEqual(reponse.json()["format"], "modele")
+        champs, _ = self._champs(reponse.json()["id"])
+        self.assertEqual(champs["poids"]["validation"], {"min": 1.0, "max": 200.0})
+
+    def test_export_kobo_xlsform(self):
+        """Les quatre ecarts Kobo/modele doivent etre absorbes sans aide."""
+        contenu = self._xlsx({
+            "survey": [
+                {"type": "start", "name": "start"},
+                {"type": "begin_group", "name": "g1", "label::Français (fr)": "Identité"},
+                {"type": "text", "name": "nom", "label::Français (fr)": "Nom", "required": "yes"},
+                {"type": "integer", "name": "age", "label::Français (fr)": "Âge",
+                 "constraint": "${age} >= 15 and ${age} <= 80"},
+                {"type": "select_one oui_non", "name": "contraception",
+                 "label::Français (fr)": "Contraception ?"},
+                {"type": "text", "name": "type_contra", "label::Français (fr)": "Laquelle ?",
+                 "relevant": "${contraception} = 'oui'"},
+                {"type": "end_group", "name": ""},
+                {"type": "calculate", "name": "calc_adulte", "calculation": "if(${age} >= 18, 1, 0)"},
+            ],
+            "choices": [
+                {"list_name": "oui_non", "name": "oui", "label::Français (fr)": "Oui"},
+                {"list_name": "oui_non", "name": "non", "label::Français (fr)": "Non"},
+            ],
+        })
+        reponse = self._importer(contenu)
+        self.assertEqual(reponse.status_code, 201, reponse.content)
+        corps = reponse.json()
+        self.assertEqual(corps["format"], "xlsform")
+        champs, definition = self._champs(corps["id"])
+
+        self.assertNotIn("start", champs)                       # ligne technique retiree
+        self.assertEqual(champs["contraception"]["type"], "select_one")
+        self.assertEqual(champs["contraception"]["list_name"], "oui_non")
+        self.assertEqual(champs["type_contra"]["relevant"], "contraception == 'oui'")
+        self.assertEqual(champs["age"]["validation"], {"min": 15.0, "max": 80.0})
+        self.assertTrue(champs["nom"]["required"])
+        # Le calcul sans libelle est conserve, avec un libelle fabrique et une
+        # formule traduite — et l'agent en est prevenu.
+        self.assertEqual(champs["calc_adulte"]["type"], "calculated")
+        self.assertEqual(champs["calc_adulte"]["formula"], "if(age >= 18, 1, 0)")
+        self.assertTrue(champs["calc_adulte"]["label"])
+        self.assertTrue(any("calc_adulte" in a for a in corps["avertissements"]))
+        self.assertEqual(len(definition["choice_lists"]["oui_non"]), 2)
+        self.assertEqual(definition["sections"][-1]["title"], "Variables calculées (automatique)")
+
+    def test_condition_intraduisible_est_retiree_pas_bloquante(self):
+        """Une fonction inconnue dans un relevant ne doit pas faire echouer
+        tout l'import : la question reste visible et l'agent est prevenu."""
+        contenu = self._xlsx({"survey": [
+            {"type": "select_multiple sympt", "name": "symptomes", "label": "Symptômes"},
+            {"type": "text", "name": "detail", "label": "Précisez",
+             "relevant": "count-selected(${symptomes}) > 0"},
+        ], "choices": [{"list_name": "sympt", "name": "fievre", "label": "Fièvre"}]})
+        reponse = self._importer(contenu)
+        self.assertEqual(reponse.status_code, 201, reponse.content)
+        champs, _ = self._champs(reponse.json()["id"])
+        self.assertNotIn("relevant", champs["detail"])
+        self.assertTrue(any("count-selected" in a for a in reponse.json()["avertissements"]))
+
+    def test_colonnes_en_francais(self):
+        contenu = self._xlsx({"Feuil1": [
+            {"Identifiant": "taille", "Type": "number", "Libellé": "Taille (cm)", "Obligatoire": "oui"},
+        ]})
+        reponse = self._importer(contenu)
+        self.assertEqual(reponse.status_code, 201, reponse.content)
+        champs, _ = self._champs(reponse.json()["id"])
+        self.assertEqual(champs["taille"]["label"], "Taille (cm)")
+        self.assertTrue(champs["taille"]["required"])
+
+    def test_echec_explique_ce_qui_a_ete_vu(self):
+        """Un fichier de reponses (une ligne par patient) n'est pas une
+        structure : le message doit nommer les colonnes vues et ce qui manque,
+        pas accuser une colonne qui n'existe pas."""
+        contenu = self._xlsx({"Feuil1": [
+            {"Nom": "Kone", "Prénom": "Awa", "Téléphone": "0700000000"},
+        ]})
+        reponse = self._importer(contenu)
+        self.assertEqual(reponse.status_code, 422)
+        detail = reponse.json()["detail"]
+        self.assertIn("Colonnes trouvées : Nom, Prénom, Téléphone", detail)
+        self.assertIn("label", detail)
+        self.assertIn("RÉPONSES", detail)
+
+
+class ImportEtudeTests(BaseApiTest):
+    """Une etude deja realisee (Google Forms, Kobo...) arrive comme un fichier
+    de reponses : une ligne par personne. L'import doit en tirer le
+    questionnaire ET les fiches, ne jamais creer de doublon en cas de relance,
+    et refuser une ligne sans bloquer les autres."""
+
+    def setUp(self):
+        super().setUp()
+        self.project = self.create_project()
+        self.lignes = [
+            {"Marca temporal": "2025-03-04 10:12:00", "code_patiente": "P001", "prenom_patiente": "Awa",
+             "nomfamille_patiente": "Kone", "telephone1_patiente": "0700000001", "sexe": "Féminin",
+             "année de naissance": 1990, "date_enquete": "2025-03-04", "Poids (kg)": 61.5,
+             "HIV_result": "Negatif", "Symptomes [fievre]": "Oui", "Symptomes [toux]": "", "Commentaire": "RAS"},
+            {"Marca temporal": "2025-03-05 09:00:00", "code_patiente": "P002", "prenom_patiente": "Bakary",
+             "nomfamille_patiente": "Traore", "telephone1_patiente": "0700000002", "sexe": "Homme",
+             "année de naissance": 1985, "date_enquete": "2025-03-05", "Poids (kg)": 72,
+             "HIV_result": "Positif", "Symptomes [fievre]": "", "Symptomes [toux]": "Oui", "Commentaire": ""},
+            # Meme personne que la premiere ligne, revue : un patient, deux fiches.
+            {"Marca temporal": "2025-06-01 11:00:00", "code_patiente": "P001", "prenom_patiente": "Awa",
+             "nomfamille_patiente": "Kone", "telephone1_patiente": "0700000001", "sexe": "F",
+             "année de naissance": 1990, "date_enquete": "2025-06-01", "Poids (kg)": 62,
+             "HIV_result": "Negatif", "Symptomes [fievre]": "", "Symptomes [toux]": "", "Commentaire": "Controle"},
+        ]
+
+    def _xlsx(self, lignes) -> bytes:
+        tampon = BytesIO()
+        with pd.ExcelWriter(tampon, engine="openpyxl") as w:
+            pd.DataFrame(lignes).to_excel(w, sheet_name="Feuil1", index=False)
+        return tampon.getvalue()
+
+    def _analyser(self, contenu):
+        return self.client.post("/api/etudes/analyser",
+                                {"project_id": self.project["id"], "file": SimpleUploadedFile("etude.xlsx", contenu)})
+
+    def _importer(self, contenu, colonnes, a_blanc, nom="Etude HPV"):
+        return self.client.post(
+            "/api/etudes/importer",
+            {"project_id": self.project["id"], "nom": nom, "a_blanc": "1" if a_blanc else "0",
+             "colonnes": json.dumps(colonnes), "file": SimpleUploadedFile("etude.xlsx", contenu)})
+
+    def test_analyse_devine_roles_et_types(self):
+        reponse = self._analyser(self._xlsx(self.lignes))
+        self.assertEqual(reponse.status_code, 200, reponse.content)
+        prop = reponse.json()
+        par_entete = {c["entete"]: c for c in prop["colonnes"]}
+        self.assertEqual(prop["lignes"], 3)
+        self.assertEqual(par_entete["prenom_patiente"]["role"], "prenom")
+        self.assertEqual(par_entete["nomfamille_patiente"]["role"], "nom")
+        self.assertEqual(par_entete["code_patiente"]["role"], "code")
+        self.assertEqual(par_entete["telephone1_patiente"]["role"], "telephone")
+        self.assertEqual(par_entete["sexe"]["role"], "sexe")
+        self.assertEqual(par_entete["année de naissance"]["role"], "annee_naissance")
+        self.assertEqual(par_entete["date_enquete"]["role"], "date_collecte")
+        # L'horodatage Google Forms ne doit pas prendre la place de la vraie date.
+        self.assertEqual(par_entete["Marca temporal"]["role"], "ignorer")
+        self.assertEqual(par_entete["Poids (kg)"]["type"], "decimal")
+        self.assertEqual(par_entete["HIV_result"]["type"], "select_one")
+        self.assertEqual({o["label"] for o in par_entete["HIV_result"]["options"]}, {"Negatif", "Positif"})
+        grille = [c for c in prop["colonnes"] if c["label"] == "Symptomes"][0]
+        self.assertEqual(grille["type"], "select_multiple")
+        self.assertEqual([o["label"] for o in grille["options"]], ["fievre", "toux"])
+        self.assertEqual(par_entete["Commentaire"]["type"], "text")
+
+    def test_a_blanc_ne_cree_rien_puis_import_cree_tout(self):
+        contenu = self._xlsx(self.lignes)
+        colonnes = self._analyser(contenu).json()["colonnes"]
+
+        blanc = self._importer(contenu, colonnes, a_blanc=True)
+        self.assertEqual(blanc.status_code, 200, blanc.content)
+        self.assertEqual(blanc.json()["fiches"], 3)
+        self.assertEqual(blanc.json()["patients_crees"], 2)
+        self.assertEqual(Patient.objects.count(), 0)
+        self.assertEqual(Submission.objects.count(), 0)
+        self.assertEqual(Form.objects.count(), 0)
+
+        reel = self._importer(contenu, colonnes, a_blanc=False)
+        self.assertEqual(reel.status_code, 200, reel.content)
+        rapport = reel.json()
+        self.assertEqual((rapport["fiches"], rapport["patients_crees"], rapport["erreurs"]), (3, 2, []))
+
+        # Le formulaire est visible dans la liste des formulaires du projet.
+        formulaires = self.client.get(f"/api/forms?project_id={self.project['id']}").json()
+        self.assertEqual([f["name"] for f in formulaires], ["Etude HPV"])
+        form = Form.objects.get(pk=rapport["formulaire"]["id"])
+        ids = [f["id"] for f in form.definition["sections"][0]["fields"]]
+        self.assertNotIn("prenom_patiente", ids)              # l'identite est sur le patient, pas une question
+        self.assertIn("poids_kg", ids)
+
+        awa = Patient.objects.get(last_name="Kone")
+        self.assertEqual(awa.sex, "F")
+        self.assertEqual(str(awa.date_of_birth), "1990-07-01")   # annee seule -> 1er juillet
+        self.assertEqual(awa.phone, "0700000001")
+        self.assertTrue(awa.anonymous_code.startswith("PAT-"))
+        self.assertEqual(Patient.objects.get(last_name="Traore").sex, "M")
+        self.assertEqual(awa.submissions.count(), 2)
+        fiche = awa.submissions.order_by("collected_at").first()
+        self.assertEqual(fiche.collected_at.strftime("%Y-%m-%d"), "2025-03-04")
+        self.assertEqual(fiche.responses["poids_kg"], 61.5)
+        self.assertEqual(fiche.responses["hiv_result"], "negatif")
+        self.assertEqual(fiche.responses["symptomes"], ["fievre"])
+
+        # 400 dossiers medicaux crees d'un coup : ca doit se retrouver dans le
+        # journal d'activite, avec les chiffres.
+        trace = AuditLog.objects.filter(entity_type="study").first()
+        self.assertIsNotNone(trace)
+        self.assertIn("Etude HPV", trace.details)
+        self.assertIn("3 fiche(s)", trace.details)
+
+    def test_relance_sans_doublon_et_ligne_refusee_isolee(self):
+        contenu = self._xlsx(self.lignes)
+        colonnes = self._analyser(contenu).json()["colonnes"]
+        self._importer(contenu, colonnes, a_blanc=False)
+
+        # Relancer le meme fichier : rien de nouveau, rien en double.
+        again = self._importer(contenu, colonnes, a_blanc=False).json()
+        self.assertEqual((again["fiches"], again["patients_crees"], again["deja_enregistrees"]), (0, 0, 3))
+        self.assertEqual(Submission.objects.count(), 3)
+        self.assertEqual(Form.objects.count(), 1)
+
+        # Une ligne de plus, avec un poids impossible a lire : elle est refusee
+        # avec son numero Excel, les autres (deja importees) restent intactes.
+        lignes = self.lignes + [dict(self.lignes[1], **{"code_patiente": "P003", "prenom_patiente": "Fatou",
+                                                        "nomfamille_patiente": "Diallo", "telephone1_patiente": "0700000003",
+                                                        "Poids (kg)": "soixante", "date_enquete": "2025-07-01"})]
+        contenu2 = self._xlsx(lignes)
+        colonnes2 = self._analyser(contenu2).json()["colonnes"]
+        # Le melange de nombres et de texte fait deviner "texte" : l'agent
+        # remet "decimal" a l'ecran, comme il le ferait pour de vrai.
+        for c in colonnes2:
+            if c["entete"] == "Poids (kg)":
+                c["type"] = "decimal"
+        rapport = self._importer(contenu2, colonnes2, a_blanc=False).json()
+        self.assertEqual(rapport["deja_enregistrees"], 3)
+        self.assertEqual(rapport["fiches"], 0)
+        self.assertEqual(len(rapport["erreurs"]), 1)
+        self.assertEqual(rapport["erreurs"][0]["ligne"], 5)     # ligne 1 = en-tetes
+        self.assertIn("nombre", rapport["erreurs"][0]["message"])
+        self.assertFalse(Patient.objects.filter(last_name="Diallo").exists())
 
 
 class HealthTests(TestCase):

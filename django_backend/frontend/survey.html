@@ -195,6 +195,7 @@
       <div id="form-admin-actions" style="display:flex;gap:10px;margin-bottom:18px;">
         <a class="btn btn-primary" id="btn-create-form" href="/form_builder.html">+ Créer un nouveau formulaire</a>
         <button class="btn btn-secondary" onclick="importForm()">⬆️ Importer un formulaire (Excel)</button>
+        <button class="btn btn-secondary" onclick="location.href='/importer_etude.html?project_id=' + projectId"><span class="icon-slot" data-icon="file-spreadsheet"></span> Importer une étude déjà remplie</button>
       </div>
       <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImport(this)">
       <div id="forms-list"></div>
@@ -724,7 +725,16 @@ async function handleImport(input) {
   const res = await fetch('/api/forms/import', {
     method: 'POST', credentials: 'same-origin', body: formData
   });
-  if (res.ok) { alert('Formulaire importé !'); loadFormsList(); }
+  if (res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const avert = Array.isArray(data.avertissements) ? data.avertissements : [];
+    // Un fichier Kobo est converti à la volée : tout ce qui a été adapté ou
+    // retiré en route est listé ici, pour être vérifié dans le constructeur.
+    let msg = `Formulaire importé : ${data.questions_imported ?? '?'} question(s).`;
+    if (avert.length) msg += `\n\nÀ vérifier (${avert.length}) :\n- ` + avert.join('\n- ');
+    alert(msg);
+    loadFormsList();
+  }
   else {
     const err = await res.json().catch(() => ({}));
     const detail = Array.isArray(err.detail) ? err.detail.map(d => d.msg || JSON.stringify(d)).join(' ; ') : (err.detail || 'Import échoué');
