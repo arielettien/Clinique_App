@@ -2,6 +2,23 @@
    Clinique App — Système de design partagé
    ========================================================================== */
 
+/* Inter, hébergée localement — comme Barlow l'est déjà pour le tableau de bord.
+   Avant, chaque page allait chercher Inter sur fonts.googleapis.com. Or le
+   serveur de l'ONG n'a AUCUN accès internet : la requête n'aboutissait jamais
+   et le navigateur attendait son expiration avant d'afficher quoi que ce soit,
+   sur toutes les pages. En local, la police s'affiche immédiatement et le mode
+   hors-ligne la retrouve dans le cache du Service Worker.
+   font-display: swap — le texte reste lisible pendant le chargement du
+   fichier plutôt que de laisser un blanc. */
+@font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('/fonts/inter-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-weight: 500; font-style: normal; font-display: swap;
+  src: url('/fonts/inter-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-weight: 600; font-style: normal; font-display: swap;
+  src: url('/fonts/inter-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-weight: 700; font-style: normal; font-display: swap;
+  src: url('/fonts/inter-latin-700-normal.woff2') format('woff2'); }
+
 :root {
   /* Couleurs de base — palette clinique, calme et sobre */
   --bg: #F3F5F4;

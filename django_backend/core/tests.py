@@ -693,3 +693,69 @@ class HealthTests(TestCase):
         connexion."""
         response = Client().get("/health")
         self.assertEqual(response.status_code, 200)
+
+
+class AccesPagesFrontendTests(TestCase):
+    """Garde d'acces aux pages du frontend.
+
+    Avant, Django servait index.html a tout le monde et c'est le JavaScript
+    qui, une fois la page AFFICHEE, interrogeait /api/auth/me puis renvoyait
+    vers la connexion : un visiteur non connecte voyait l'accueil clignoter
+    une seconde. La redirection se fait desormais cote serveur, avant le
+    moindre octet de HTML.
+
+    Ces tests verifient surtout ce qui ne doit PAS etre redirige : la page de
+    connexion elle-meme, le lien communautaire (rempli sans compte) et toutes
+    les ressources. Rediriger une feuille de style rendrait la page de
+    connexion illisible, et rediriger community.html couperait les agents de
+    terrain qui n'ont pas de compte.
+    """
+
+    def setUp(self):
+        User.objects.create_user(email="admin@test.ci", password="motdepasse123",
+                                 full_name="Admin Test", role="admin")
+        self.anonyme = Client()
+
+    def test_accueil_redirige_vers_la_connexion(self):
+        reponse = self.anonyme.get("/")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(reponse["Location"], "/login.html")
+
+    def test_page_interne_redirige_et_memorise_la_destination(self):
+        """Un favori vers une page precise doit y ramener apres connexion,
+        pas deposer l'agent sur l'accueil."""
+        reponse = self.anonyme.get("/patients.html")
+        self.assertEqual(reponse.status_code, 302)
+        self.assertEqual(reponse["Location"], "/login.html?suivant=%2Fpatients.html")
+
+    def test_la_redirection_n_est_jamais_mise_en_cache(self):
+        """Une redirection memorisee continuerait d'envoyer vers la connexion
+        meme une fois la session ouverte."""
+        reponse = self.anonyme.get("/")
+        self.assertIn("no-store", reponse["Cache-Control"])
+
+    def test_page_de_connexion_accessible_sans_compte(self):
+        self.assertEqual(self.anonyme.get("/login.html").status_code, 200)
+
+    def test_lien_communautaire_accessible_sans_compte(self):
+        """community.html est remplie par des agents sans compte, protegee par
+        un code d'acces partage : la rediriger les couperait entierement."""
+        self.assertEqual(self.anonyme.get("/community.html").status_code, 200)
+
+    def test_les_ressources_restent_accessibles_sans_compte(self):
+        """La page de connexion a besoin de ses styles, scripts et polices ;
+        sw.js doit rester joignable pour pouvoir se mettre a jour."""
+        for chemin in ("/style.css", "/style_blanc_bleu.css", "/icons.js",
+                       "/sw.js", "/img/connexion.svg",
+                       "/fonts/inter-latin-400-normal.woff2"):
+            with self.subTest(chemin=chemin):
+                self.assertEqual(self.anonyme.get(chemin).status_code, 200)
+
+    def test_une_fois_connecte_les_pages_sont_servies(self):
+        connecte = Client()
+        connecte.post("/api/auth/login",
+                      {"email": "admin@test.ci", "password": "motdepasse123"},
+                      content_type="application/json")
+        for chemin in ("/", "/patients.html"):
+            with self.subTest(chemin=chemin):
+                self.assertEqual(connecte.get(chemin).status_code, 200)
