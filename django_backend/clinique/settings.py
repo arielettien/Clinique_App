@@ -157,6 +157,29 @@ REST_FRAMEWORK = {
 STATIC_URL = "/static/"
 FRONTEND_DIR = BASE_DIR / "frontend"
 
+# --- Rechargement automatique du frontend (DEVELOPPEMENT UNIQUEMENT) -------
+# gunicorn --reload ne surveille que les fichiers PYTHON : une modification de
+# HTML/CSS/JS restait invisible, non pas a cause du serveur mais du Service
+# Worker, qui sert l'app shell depuis son cache en priorite (cache-first).
+# Quand ce reglage est actif, core/frontend.py :
+#   1. sert le frontend avec Cache-Control: no-store,
+#   2. injecte un petit script qui interroge /__dev/version et recharge la page
+#      des qu'un fichier change,
+#   3. remplace sw.js par une version neutralisee qui se desinstalle et vide
+#      ses caches.
+# Le point 3 DESACTIVE donc le mode hors-ligne : c'est voulu en developpement,
+# ce serait un bug grave en production. Le reglage suit APP_RELOAD, qui vaut
+# deja "false" sur le serveur de l'ONG (voir DEPLOIEMENT.md) ; on peut aussi le
+# forcer independamment avec FRONTEND_LIVE_RELOAD, notamment pour remettre le
+# vrai Service Worker le temps de tester le mode hors-ligne.
+# docker-compose transmet une chaine VIDE quand la variable n'est pas
+# definie dans .env : il faut la traiter comme "absente", sinon le reglage
+# basculerait a false pour tout le monde sans que personne ne l'ait demande.
+_live_reload = os.environ.get("FRONTEND_LIVE_RELOAD", "").strip()
+if not _live_reload:
+    _live_reload = os.environ.get("APP_RELOAD", "true")
+FRONTEND_LIVE_RELOAD = _live_reload.lower() == "true"
+
 # Fichiers envoyes depuis les formulaires (photos, signatures, documents).
 UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", BASE_DIR / "uploads"))
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)

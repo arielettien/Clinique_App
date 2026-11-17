@@ -7,7 +7,7 @@ version precedente).
 from django.urls import include, path, re_path
 
 from core import views as core_views
-from core.frontend import serve_frontend
+from core.frontend import dev_live_reload_script, dev_version, serve_frontend
 
 urlpatterns = [
     path("api/", include("accounts.urls")),
@@ -28,6 +28,13 @@ urlpatterns = [
     # frontend/offline_db.js). La deplacer casserait la detection du retour
     # de connexion.
     path("health", core_views.health),
+
+    # Rechargement automatique du frontend en developpement. Comme /health
+    # et /api/..., ces routes doivent rester AVANT l'attrape-tout, sinon il
+    # les masquerait. Elles renvoient 404 quand FRONTEND_LIVE_RELOAD est
+    # desactive : rien n'est expose en production.
+    path("__dev/version", dev_version),
+    path("__dev/live-reload.js", dev_live_reload_script),
 
     # Frontend : toutes les autres adresses servent un fichier du dossier
     # frontend/ (index.html par defaut).

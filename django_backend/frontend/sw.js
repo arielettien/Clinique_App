@@ -15,7 +15,15 @@
 // depuis le cache et personne ne voit la mise a jour.
 // v9 : tableau de bord des indicateurs (nouvelles pages, feuille de style et
 // polices Barlow hebergees localement).
-const CACHE_NAME = 'clinique-app-shell-v10';
+// v11 : police Inter desormais hebergee localement (avant, chaque page la
+// chargeait depuis Google Fonts, injoignable sur le serveur de l'ONG qui n'a
+// pas d'acces internet).
+// v12 : page de connexion en deux panneaux + son illustration (img/).
+// v13 : le serveur redirige desormais vers /login.html quand la session
+// manque. Deux consequences ici : on ne met jamais en cache une reponse
+// issue d'une redirection, et l'ouverture d'une page passe par le reseau
+// d'abord (voir les commentaires plus bas).
+const CACHE_NAME = 'clinique-app-shell-v13';
 const APP_SHELL_FILES = [
   '/', '/login.html', '/style.css', '/style_blanc_bleu.css', '/app_shell.js', '/icons.js', '/dexie.min.js', '/offline_db.js',
   '/index.html', '/project_hub.html', '/survey.html', '/follow_up.html',
@@ -26,6 +34,9 @@ const APP_SHELL_FILES = [
   '/fonts/barlow-latin-400-normal.woff2', '/fonts/barlow-latin-500-normal.woff2',
   '/fonts/barlow-latin-600-normal.woff2', '/fonts/barlow-condensed-latin-500-normal.woff2',
   '/fonts/barlow-condensed-latin-600-normal.woff2',
+  '/fonts/inter-latin-400-normal.woff2', '/fonts/inter-latin-500-normal.woff2',
+  '/fonts/inter-latin-600-normal.woff2', '/fonts/inter-latin-700-normal.woff2',
+  '/img/connexion.svg',
 ];
 
 self.addEventListener('install', (event) => {
@@ -45,6 +56,12 @@ self.addEventListener('install', (event) => {
           fetch(url, { cache: 'no-store' })
             .then((reponse) => {
               if (!reponse.ok) throw new Error('HTTP ' + reponse.status);
+              // Reponse obtenue APRES une redirection : le serveur a renvoye
+              // la page de connexion a la place de celle demandee, faute de
+              // session. La mettre en cache enregistrerait la page de
+              // connexion SOUS l'adresse de la vraie page, qui serait ensuite
+              // servie telle quelle une fois l'agent connecte.
+              if (reponse.redirected) throw new Error('redirige vers ' + reponse.url);
               return cache.put(url, reponse);
             })
             .catch((e) => console.warn('SW: échec cache', url, e))
@@ -73,6 +90,34 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.method !== 'GET') return;
 
+  // Ouverture d'une page (navigation) : le RESEAU d'abord, le cache en repli.
+  // Seul le serveur sait si la session est encore valide. En cache-first, une
+  // personne deconnectee se voyait reservir l'accueil depuis le cache, puis
+  // renvoyer vers la connexion par le JavaScript — precisement le
+  // clignotement que la redirection serveur supprime. Le repli sur le cache
+  // des que le reseau ne repond pas preserve entierement le mode hors-ligne.
+  //
+  // Une requete de navigation a un mode de redirection "manual" : fetch rend
+  // alors la redirection telle quelle (reponse opaque, status 0) et c'est le
+  // navigateur qui la suit. On ne la met donc jamais en cache.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((reponse) => {
+          if (reponse && reponse.status === 200 && !reponse.redirected) {
+            const copie = reponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copie));
+          }
+          return reponse;
+        })
+        .catch(() =>
+          caches.match(event.request, { ignoreSearch: true })
+            .then((cached) => cached || Response.error())
+        )
+    );
+    return;
+  }
+
   event.respondWith(
     // ignoreSearch : nos pages utilisent des paramètres (?project_id=...,
     // ?form_id=...) qui ne changent jamais LE FICHIER servi, seulement ce
@@ -88,7 +133,7 @@ self.addEventListener('fetch', (event) => {
       // réouvertures de la page.
       const network = fetch(event.request, { cache: 'no-store' })
         .then((response) => {
-          if (response && response.status === 200) {
+          if (response && response.status === 200 && !response.redirected) {
             const copy = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           }

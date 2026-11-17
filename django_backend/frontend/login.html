@@ -3,19 +3,217 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1D4ED8">
 <title>Connexion — Clinique</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Aucune police distante : Inter est servie depuis /fonts (voir les
+     @font-face de style.css). Le serveur de l'ONG n'a pas d'accès internet,
+     un <link> vers Google Fonts y retardait l'affichage de chaque page. -->
 <link rel="stylesheet" href="/style.css">
 <style>
-  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-  .login-box { background: var(--surface); padding: 36px; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); width: 340px; border: 1px solid var(--border); }
-  .login-box h1 { font-size: 1.3rem; margin: 0 0 4px 0; text-align: center; }
-  .login-box .subtitle { text-align: center; color: var(--ink-faint); font-size: 0.85rem; margin-bottom: 22px; }
-  .login-box input { width: 100%; margin-bottom: 12px; box-sizing: border-box; }
-  .login-box button { width: 100%; }
-  #error-message { color: var(--sev-critical-fg); font-size: 0.85rem; margin-bottom: 12px; display: none; }
+  /* ----------------------------------------------------------------------
+     Écran de connexion en deux panneaux : illustration à gauche, formulaire
+     à droite. Seule la mise en page est définie ici ; les couleurs, champs
+     et boutons viennent de style.css et du thème, sinon cet écran dériverait
+     du reste de l'application à la première retouche de la charte.
+     ---------------------------------------------------------------------- */
+
+  body.page-connexion {
+    display: grid;
+    /* Le formulaire occupe une colonne un peu plus étroite que l'image : il
+       se lit mieux sur une largeur courte, et l'illustration supporte d'être
+       recadrée alors qu'un formulaire comprimé devient pénible. */
+    grid-template-columns: 1fr 44%;
+    /* 100dvh plutôt que 100vh : sur mobile, la barre d'adresse rétractable
+       fausse vh et laissait dépasser le contenu sous le bas de l'écran. */
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* --- Panneau illustration (gauche) ---------------------------------- */
+
+  .panneau-visuel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    /* Aucune marge : l'illustration touche les bords du panneau. Le fond du
+       SVG est exactement --primary-soft, la jonction est donc invisible. */
+    padding: 0;
+    background: var(--primary-soft);
+  }
+
+  /* L'illustration occupe toute la place disponible et garde ses
+     proportions (object-fit: contain), le fond du panneau remplit le reste.
+     Auparavant en cover à 100 % : l'image était alors RECADRÉE dès que ses
+     proportions différaient de celles du panneau — le haut et le bas de
+     l'illustration étaient coupés sans qu'on s'en aperçoive.
+     POUR L'AGRANDIR : monte le pourcentage (100 % = pleine largeur).
+     POUR QU'UNE PHOTO REMPLISSE TOUT LE PANNEAU : width/height à 100 %,
+     object-fit: cover, et retire le padding ci-dessus. */
+  .panneau-visuel img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  /* --- Panneau formulaire (droite) ------------------------------------ */
+
+  .panneau-formulaire {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-6);
+    background: var(--surface);
+  }
+
+  /* La marque est ancrée en haut à gauche du panneau, tandis que le
+     formulaire reste centré dans la hauteur restante. Colonne flex plutôt
+     que positionnement absolu : en absolu, sur un écran peu haut (portable
+     16/9, téléphone en paysage), le formulaire centré passerait par-dessus
+     le logo au lieu de le repousser. */
+  .zone-centrale {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .formulaire-contenu {
+    width: 100%;
+    max-width: 384px;
+  }
+
+  .marque {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 0 0 auto;
+    margin-bottom: var(--space-5);
+  }
+
+  .marque-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-sm);
+    background: var(--primary-soft);
+    color: var(--primary);
+    /* style.css définit .icon { width: 1em; height: 1em } : la taille d'une
+       icône se règle donc par le font-size de son conteneur, et PAS par les
+       attributs width/height du SVG, que cette règle écrase. Sans ce
+       font-size, le stéthoscope retombait à 16 px, perdu dans son carré. */
+    font-size: 1.5rem;
+  }
+
+  /* 1,25rem et non davantage : au-delà, la marque rivalise avec le titre
+     « Bon retour » et l'œil ne sait plus lequel lire en premier. La marque
+     situe, le titre annonce — c'est le titre qui doit dominer. */
+  .marque-nom {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+
+  .formulaire-contenu h1 { margin: 0 0 var(--space-2) 0; }
+
+  .intro {
+    margin: 0 0 var(--space-6) 0;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: var(--ink-muted);
+  }
+
+  /* --- Champs --------------------------------------------------------- */
+
+  .champ { margin-bottom: var(--space-4); }
+
+  .champ label {
+    display: block;
+    margin-bottom: var(--space-2);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .champ input { width: 100%; }
+
+  /* Le bouton « afficher » se superpose au champ : on réserve la place à
+     droite pour que le mot de passe ne passe jamais dessous. */
+  .champ-mdp { position: relative; }
+  .champ-mdp input { padding-right: var(--space-7); }
+
+  .bascule-mdp {
+    position: absolute;
+    top: 0;
+    right: 0;
+    /* Cible tactile pleine hauteur : visé d'un pouce, dehors, souvent à une
+       seule main — en dessous de 44 px on le rate une fois sur trois. */
+    width: var(--cible-tactile);
+    height: 100%;
+    min-height: var(--cible-tactile);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--ink-faint);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    /* Règle la taille de l'œil (voir .marque-logo) : à 1 em hérité du corps
+       de texte, il était perdu au milieu de sa zone de 44 px. */
+    font-size: 1.15rem;
+  }
+  .bascule-mdp:hover { color: var(--ink); }
+  .bascule-mdp:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+  .champ-aide {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-2) 0 0 0;
+    font-size: 0.85rem;
+    color: var(--sev-medium-fg);
+  }
+
+  /* --- Action --------------------------------------------------------- */
+
+  .connexion-valider {
+    width: 100%;
+    min-height: var(--cible-tactile);
+    margin-top: var(--space-2);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+  .connexion-valider[disabled] { opacity: 0.6; cursor: not-allowed; }
+
+  #message-erreur {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  #message-erreur .icon { flex: 0 0 auto; margin-top: 2px; }
+  [hidden] { display: none !important; }
+
+  /* --- Téléphone et petites tablettes --------------------------------- */
+  /* L'illustration disparaît sous 860 px : sur un téléphone, la moitié de
+     l'écran prise par une image décorative repousse le bouton de validation
+     hors de portée du pouce. Le formulaire prend alors toute la largeur. */
+  @media (max-width: 860px) {
+    body.page-connexion { grid-template-columns: 1fr; }
+    .panneau-visuel { display: none; }
+    .panneau-formulaire { padding: var(--space-6) var(--space-4); }
+    .marque { margin-bottom: var(--space-6); }
+  }
 </style>
   <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
        le theme l'emporte sur les reglages locaux herites de l'ancienne
@@ -23,42 +221,209 @@
        precedente : aucune autre modification n'a ete faite. -->
   <link rel="stylesheet" href="/style_blanc_bleu.css">
 </head>
-<body>
+<body class="page-connexion">
 
-<div class="login-box">
-  <h1>🩺 Clinique</h1>
-  <p class="subtitle">Connexion à ton espace</p>
-  <p id="error-message"></p>
-  <form id="login-form">
-    <input name="email" type="email" placeholder="Email" required autofocus>
-    <input name="password" type="password" placeholder="Mot de passe" required>
-    <button type="submit" class="btn btn-primary">Se connecter</button>
-  </form>
-</div>
+<!-- Panneau décoratif : aria-hidden, il n'apporte aucune information. Pour
+     changer l'image, remplace frontend/img/connexion.svg (n'importe quel
+     format d'image convient) ou modifie le src ci-dessous. -->
+<aside class="panneau-visuel" aria-hidden="true">
+  <img src="/img/connexion.svg" alt="">
+</aside>
 
+<main class="panneau-formulaire">
+
+  <div class="marque">
+    <span class="marque-logo" data-icon="stethoscope"></span>
+    <span class="marque-nom">Clinique</span>
+  </div>
+
+  <div class="zone-centrale">
+    <div class="formulaire-contenu">
+
+    <h1>Bon retour</h1>
+    <p class="intro">
+      Connecte-toi pour accéder aux dossiers patients, aux formulaires et au
+      suivi de ta structure.
+    </p>
+
+    <!-- role="alert" : le message est annoncé dès qu'il apparaît, sans quoi un
+         agent qui navigue au clavier ne saurait pas pourquoi rien ne se passe. -->
+    <p id="message-erreur" class="alert-banner severity-high" role="alert" hidden></p>
+
+    <form id="formulaire-connexion" novalidate>
+      <div class="champ">
+        <label for="champ-email">Adresse email</label>
+        <!-- autocomplete="username" (et non "email") : c'est la valeur que les
+             gestionnaires de mots de passe attendent pour un couple
+             identifiant/mot de passe, sinon ils ne proposent pas l'entrée. -->
+        <input id="champ-email" name="email" type="email" inputmode="email"
+               autocomplete="username" autocapitalize="none" spellcheck="false"
+               required autofocus placeholder="prenom.nom@exemple.org">
+      </div>
+
+      <div class="champ">
+        <label for="champ-mdp">Mot de passe</label>
+        <div class="champ-mdp">
+          <input id="champ-mdp" name="password" type="password"
+                 autocomplete="current-password" required>
+          <button type="button" id="bascule-mdp" class="bascule-mdp"
+                  aria-label="Afficher le mot de passe" aria-pressed="false"></button>
+        </div>
+        <!-- Verr. Maj : cause la plus fréquente d'un « mot de passe incorrect »
+             alors qu'il est bon, surtout sur les claviers du bureau. -->
+        <p id="alerte-majuscules" class="champ-aide" hidden>
+          <span data-icon="triangle-alert"></span>
+          La touche Verr. Maj est activée.
+        </p>
+      </div>
+
+      <button type="submit" id="bouton-connexion" class="btn btn-primary connexion-valider">
+        Se connecter
+      </button>
+    </form>
+
+    </div>
+  </div>
+</main>
+
+<script src="/icons.js"></script>
 <script>
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const payload = Object.fromEntries(form.entries());
-  const errorMsg = document.getElementById('error-message');
-  errorMsg.style.display = 'none';
+(function () {
+  'use strict';
 
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify(payload)
+  const form = document.getElementById('formulaire-connexion');
+  const champEmail = document.getElementById('champ-email');
+  const champMdp = document.getElementById('champ-mdp');
+  const bouton = document.getElementById('bouton-connexion');
+  const bascule = document.getElementById('bascule-mdp');
+  const erreur = document.getElementById('message-erreur');
+  const alerteMaj = document.getElementById('alerte-majuscules');
+
+  // --- Icônes ------------------------------------------------------------
+  // icons.js est chargé en local : les icônes s'affichent aussi hors-ligne.
+  // La taille passée ici est sans effet : style.css impose .icon { width: 1em }.
+  // Pour agrandir une icône, on règle le font-size de son conteneur en CSS
+  // (voir .marque-logo). On laisse 1em pour que ce soit explicite.
+  document.querySelectorAll('[data-icon]').forEach((el) => {
+    el.innerHTML = icon(el.dataset.icon, { size: '1em' });
   });
 
-  if (res.ok) {
-    window.location.href = '/';
-  } else {
-    const data = await res.json().catch(() => ({}));
-    errorMsg.textContent = data.detail || "Email ou mot de passe incorrect.";
-    errorMsg.style.display = 'block';
+  function afficherErreur(texte) {
+    erreur.innerHTML = icon('triangle-alert', { size: '1em' }) + '<span></span>';
+    erreur.querySelector('span').textContent = texte;
+    erreur.hidden = false;
   }
-});
+
+  function masquerErreur() { erreur.hidden = true; }
+
+  // Page à ouvrir une fois connecté. Le serveur pose « suivant » quand il
+  // redirige quelqu'un qui visait une page précise (favori vers un dossier
+  // patient, lien partagé) : on l'y ramène au lieu de le déposer sur
+  // l'accueil. Seul un chemin interne est accepté — il commence par « / »
+  // mais pas par « // ». Sans ce filtre, une adresse forgée pourrait
+  // expédier l'agent vers un site extérieur juste après sa connexion, au
+  // moment précis où il fait le plus confiance à ce qu'il voit.
+  function destinationApresConnexion() {
+    const brut = new URLSearchParams(window.location.search).get('suivant');
+    if (brut && brut.startsWith('/') && !brut.startsWith('//')) return brut;
+    return '/';
+  }
+
+  // --- Afficher / masquer le mot de passe --------------------------------
+  function majBascule() {
+    const visible = champMdp.type === 'text';
+    bascule.innerHTML = icon(visible ? 'eye-off' : 'eye', { size: '1em' });
+    bascule.setAttribute('aria-label',
+      visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+    bascule.setAttribute('aria-pressed', String(visible));
+  }
+  bascule.addEventListener('click', () => {
+    champMdp.type = champMdp.type === 'password' ? 'text' : 'password';
+    majBascule();
+    champMdp.focus();
+  });
+  majBascule();
+
+  // --- Verr. Maj ---------------------------------------------------------
+  // getModifierState n'existe pas sur tous les claviers virtuels : on reste
+  // silencieux plutôt que d'afficher un avertissement à tort.
+  function verifierMajuscules(e) {
+    if (typeof e.getModifierState !== 'function') return;
+    alerteMaj.hidden = !e.getModifierState('CapsLock');
+  }
+  champMdp.addEventListener('keyup', verifierMajuscules);
+  champMdp.addEventListener('keydown', verifierMajuscules);
+  champMdp.addEventListener('blur', () => { alerteMaj.hidden = true; });
+
+  // --- Envoi -------------------------------------------------------------
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    masquerErreur();
+
+    const email = champEmail.value.trim();
+    const motDePasse = champMdp.value;
+
+    // Validation côté page avant tout appel réseau : sur une connexion lente,
+    // attendre une réponse du serveur pour apprendre qu'un champ est vide est
+    // une perte de temps inutile.
+    if (!email || !motDePasse) {
+      afficherErreur('Renseigne ton adresse email et ton mot de passe.');
+      (!email ? champEmail : champMdp).focus();
+      return;
+    }
+
+    if (navigator.onLine === false) {
+      afficherErreur("Tu es hors-ligne. La connexion a besoin du serveur de la clinique : "
+        + "vérifie le réseau, puis réessaie.");
+      return;
+    }
+
+    const libelleInitial = bouton.textContent;
+    bouton.disabled = true;
+    bouton.textContent = 'Connexion…';
+
+    try {
+      const entetes = { 'Content-Type': 'application/json' };
+      // Le jeton CSRF n'est pas exigé pour une première connexion (aucune
+      // session ouverte), mais il l'est si quelqu'un revient sur cette page
+      // en étant déjà connecté. On le joint quand il existe : sans cela, ce
+      // cas précis renvoyait un 403 incompréhensible pour l'utilisateur.
+      const jeton = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+      if (jeton) entetes['X-CSRFToken'] = decodeURIComponent(jeton[1]);
+
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: entetes,
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: email, password: motDePasse })
+      });
+
+      if (res.ok) {
+        window.location.href = destinationApresConnexion();
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        afficherErreur(data.detail
+          || 'Trop de tentatives de connexion. Patiente quelques minutes avant de réessayer.');
+      } else {
+        afficherErreur(data.detail || 'Email ou mot de passe incorrect.');
+      }
+      champMdp.value = '';
+      champMdp.focus();
+    } catch (err) {
+      // fetch() ne lève que si la requête n'a pas pu aboutir : serveur éteint,
+      // câble débranché, wifi perdu. Sans ce filet, le bouton restait bloqué
+      // sur « Connexion… » et la page semblait figée sans aucune explication.
+      afficherErreur("Impossible de joindre le serveur de la clinique. "
+        + "Vérifie que tu es bien connecté au réseau, puis réessaie.");
+    } finally {
+      bouton.disabled = false;
+      bouton.textContent = libelleInitial;
+    }
+  });
+})();
 </script>
 
 </body>

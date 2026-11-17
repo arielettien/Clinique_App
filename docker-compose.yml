@@ -22,9 +22,20 @@ services:
       SECRET_KEY: ${SECRET_KEY:?Défini SECRET_KEY dans un fichier .env (voir .env.example)}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       APP_RELOAD: ${APP_RELOAD:-true}
+      # Rechargement automatique du frontend. Laisse vide pour suivre
+      # APP_RELOAD ; "false" remet le vrai Service Worker, necessaire
+      # pour tester le mode hors-ligne.
+      FRONTEND_LIVE_RELOAD: ${FRONTEND_LIVE_RELOAD:-}
       TZ: ${TZ:-UTC}
     ports:
-      - "8000:8000"
+      # Port cote machine hote configurable via APP_PORT dans le fichier
+      # .env (le conteneur, lui, ecoute toujours sur 8000). Sans valeur,
+      # on garde 8000 : c'est le port suppose par DEPLOIEMENT.md et par
+      # la procedure d'installation sur le serveur de l'ONG. Sert a
+      # liberer 8000 sur un poste de developpement ou il est deja pris.
+      # 0.0.0.0 est explicite pour rappeler que le service est joignable
+      # depuis tout le reseau local, pas seulement depuis localhost.
+      - "0.0.0.0:${APP_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
