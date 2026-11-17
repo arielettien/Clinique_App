@@ -7,9 +7,11 @@ reprise de donnees antidatees, idempotence de la file d'attente hors-ligne,
 attribution des codes et numeros, cloisonnement des droits, et acces
 communautaire sans compte.
 """
+import csv
 import json
 from io import BytesIO
 
+import openpyxl
 import pandas as pd
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
@@ -347,6 +349,129 @@ class ExportTests(BaseApiTest):
         colonnes = self._entetes(
             f"/api/forms/{form['id']}/export?format=csv&columns=age")
         self.assertEqual(colonnes, ["age"])
+
+
+class ExportSuiviTests(BaseApiTest):
+    """Exporter le suivi comme le font REDCap ou CommCare : une ligne par
+    visite, le numero de dossier sur chaque ligne pour relier visites et
+    dossiers, et une periode choisie (le rapport annuel d'un bailleur).
+
+    Trois dossiers : A ouvert en 2025 et toujours actif, B ouvert et clos en
+    2026, C clos en 2025 — qui ne fait donc pas partie du suivi 2026."""
+
+    def setUp(self):
+        super().setUp()
+        self.project = self.create_project()
+        self.visite = self.client.post(
+            "/api/forms",
+            {"project_id": self.project["id"], "name": "Visite de suivi", "form_type": "follow_up",
+             "definition": {"sections": [{"title": "Visite", "fields": [
+                 {"id": "poids", "label": "Poids (kg)", "type": "number"},
+                 {"id": "prochain_rdv", "label": "Prochain rendez-vous", "type": "date",
+                  "next_visit_marker": True},
+             ]}]}},
+            content_type="application/json").json()
+        self.enquete = self.create_form(self.project["id"])
+        self.dossiers = {}
+        for cle, prenom, nom, inscrit in (("A", "Awa", "Kone", "2025-01-10"),
+                                          ("B", "Bakary", "Traore", "2026-02-01"),
+                                          ("C", "Fatou", "Diallo", "2024-03-01")):
+            patient = self.client.post(
+                "/api/patients", {"project_id": self.project["id"], "first_name": prenom, "last_name": nom},
+                content_type="application/json").json()
+            dossier = self.client.post(
+                "/api/cases", {"project_id": self.project["id"], "patient_id": patient["id"],
+                               "enrolled_at": f"{inscrit}T08:00:00"},
+                content_type="application/json").json()
+            self.dossiers[cle] = {"patient": patient["id"], "id": dossier["id"], "numero": dossier["case_number"]}
+        for cle, date, poids, rdv in (("A", "2025-06-01", 60, "2026-01-15"), ("A", "2026-03-10", 61, "2026-09-10"),
+                                      ("B", "2026-02-01", 70, None), ("C", "2024-06-01", 55, None)):
+            reponses = {"poids": poids}
+            if rdv:
+                reponses["prochain_rdv"] = rdv
+            self.client.post("/api/submissions",
+                             {"form_id": self.visite["id"], "patient_id": self.dossiers[cle]["patient"],
+                              "case_id": self.dossiers[cle]["id"], "collected_at": f"{date}T09:00:00",
+                              "responses": reponses},
+                             content_type="application/json")
+        # Une enquete hors suivi pour A : ne doit jamais apparaitre dans l'export du suivi.
+        self.client.post("/api/submissions",
+                         {"form_id": self.enquete["id"], "patient_id": self.dossiers["A"]["patient"],
+                          "collected_at": "2026-04-01T09:00:00", "responses": {"poids": 62}},
+                         content_type="application/json")
+        for cle, cloture in (("B", "2026-06-30"), ("C", "2025-05-01")):
+            self.client.post(f"/api/cases/{self.dossiers[cle]['id']}/close",
+                             {"status": "closed", "closed_at": f"{cloture}T00:00:00", "reason": "Fin du suivi"},
+                             content_type="application/json")
+
+    def _csv(self, url):
+        reponse = self.client.get(url)
+        self.assertEqual(reponse.status_code, 200, reponse.content if hasattr(reponse, "content") else "")
+        texte = b"".join(reponse.streaming_content).decode("utf-8-sig")
+        return list(csv.DictReader(texte.splitlines(), delimiter=";"))
+
+    def _classeur(self, url):
+        reponse = self.client.get(url)
+        self.assertEqual(reponse.status_code, 200)
+        return openpyxl.load_workbook(BytesIO(b"".join(reponse.streaming_content)))
+
+    @staticmethod
+    def _lignes(feuille):
+        entetes = [c.value for c in feuille[1]]
+        return [dict(zip(entetes, [c.value for c in ligne])) for ligne in feuille.iter_rows(min_row=2)]
+
+    def test_chaque_visite_porte_son_numero_de_dossier(self):
+        lignes = self._csv(f"/api/forms/{self.visite['id']}/export?format=csv")
+        self.assertEqual(len(lignes), 4)
+        attendu = {d["numero"] for d in self.dossiers.values()}
+        self.assertEqual({l["numero_dossier"] for l in lignes}, attendu)
+        # Sur une Enquete, aucune fiche n'a de dossier : pas de colonne toujours vide.
+        self.assertNotIn("numero_dossier", self._csv(f"/api/forms/{self.enquete['id']}/export?format=csv")[0])
+
+    def test_export_des_visites_par_periode(self):
+        lignes = self._csv(f"/api/forms/{self.visite['id']}/export?format=csv&start=2026-01-01&end=2026-12-31")
+        self.assertEqual(sorted(l["date"][:10] for l in lignes), ["2026-02-01", "2026-03-10"])
+
+    def test_liste_des_dossiers_d_une_annee(self):
+        lignes = self._csv(f"/api/projects/{self.project['id']}/cases/export?format=csv"
+                           f"&start=2026-01-01&end=2026-12-31")
+        par_numero = {l["numero_dossier"]: l for l in lignes}
+        # C a ete clos en 2025 : il ne fait pas partie du suivi 2026.
+        self.assertEqual(set(par_numero), {self.dossiers["A"]["numero"], self.dossiers["B"]["numero"]})
+        a = par_numero[self.dossiers["A"]["numero"]]
+        self.assertEqual((a["nb_visites"], a["nb_visites_periode"]), ("2", "1"))
+        self.assertEqual(a["prochain_rdv"], "2026-09-10")
+        self.assertIn(a["en_retard"], ("oui", "non"))
+
+    def test_suivi_complet_d_une_annee(self):
+        classeur = self._classeur(f"/api/projects/{self.project['id']}/cases/export-complet"
+                                  f"?start=2026-01-01&end=2026-12-31")
+        # L'enquete hors suivi n'a pas de feuille : elle n'est rattachee a aucun dossier.
+        self.assertEqual(classeur.sheetnames, ["À lire", "Dossiers", "Visite de suivi", "Dictionnaire"])
+        dossiers = self._lignes(classeur["Dossiers"])
+        self.assertEqual({d["numero_dossier"] for d in dossiers},
+                         {self.dossiers["A"]["numero"], self.dossiers["B"]["numero"]})
+        visites = self._lignes(classeur["Visite de suivi"])
+        self.assertEqual(sorted((v["numero_dossier"], v["poids"]) for v in visites),
+                         sorted([(self.dossiers["A"]["numero"], 61), (self.dossiers["B"]["numero"], 70)]))
+        lire = [c.value for ligne in classeur["À lire"].iter_rows() for c in ligne if c.value]
+        self.assertIn("du 01/01/2026 au 31/12/2026", lire)
+        dico = self._lignes(classeur["Dictionnaire"])
+        self.assertIn(("Visite de suivi", "numero_dossier"), {(d["feuille"], d["colonne"]) for d in dico})
+        trace = AuditLog.objects.filter(entity_type="case_full_export").first()
+        self.assertIn("2 dossier(s), 2 visite(s)", trace.details)
+
+    def test_suivi_complet_sans_periode_prend_tout(self):
+        classeur = self._classeur(f"/api/projects/{self.project['id']}/cases/export-complet")
+        self.assertEqual(len(self._lignes(classeur["Dossiers"])), 3)
+        self.assertEqual(len(self._lignes(classeur["Visite de suivi"])), 4)
+
+    def test_periode_a_l_envers_refusee(self):
+        for url in (f"/api/projects/{self.project['id']}/cases/export-complet?start=2026-12-31&end=2026-01-01",
+                    f"/api/projects/{self.project['id']}/cases/export?format=csv&start=2026-12-31&end=2026-01-01"):
+            reponse = self.client.get(url)
+            self.assertEqual(reponse.status_code, 400)
+            self.assertIn("début", reponse.json()["detail"])
 
 
 class CommunityLinkTests(BaseApiTest):

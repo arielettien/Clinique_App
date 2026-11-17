@@ -86,6 +86,14 @@ is real business logic — a `services.py` kept separate from the HTTP layer.
 - `submissions/` — `Submission` (one filled-in form instance, optionally tied to a `Case`), plus
   server-side uniqueness and age-consistency checks.
 - `cases/` — `Case` (a longitudinal enrollment of a `Patient` in a `Project`), its timeline, and exports.
+  Exports follow the REDCap/CommCare convention — one row per visit, never "Visite1, Visite2…" columns —
+  with the case number (`numero_dossier`) on every visit row: `clinical_forms.exports.colonnes_identite()`
+  adds it for any non-survey form, and `lignes_par_evenement()` builds visit rows for both the per-form
+  export and `cases/exports.export_suivi_complet` (`/api/projects/{id}/cases/export-complet`, xlsx only:
+  sheets « À lire », Dossiers, one per visit form, Dictionnaire). Both case exports take optional
+  `start`/`end` (a reversed period is a 400, never an empty file); the case list then keeps the cases
+  *open during the period* (enrolled before its end, not closed before its start) and adds
+  `nb_visites_periode`, `prochain_rdv`, `en_retard`. Visits are selected by their own date.
 - `attachments/` — `Media` metadata and upload/serving rules.
 - `community/` — the public, unauthenticated endpoints behind a shared access code.
 - `indicators/` — monitoring & evaluation dashboard. Models: `Indicator` (source `Form`, `calculation` =

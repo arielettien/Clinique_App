@@ -99,6 +99,14 @@
     display: none; align-items: center; gap: 12px; background: var(--surface-muted);
     border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 14px; margin-bottom: 10px;
   }
+  /* Exports du suivi : une seule periode pour les trois boutons. */
+  .export-suivi { margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+  .export-ligne { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+  .export-ligne input[type=date] { min-height: var(--cible-tactile, 44px); }
+  .export-libelle { font-size: 0.85rem; color: var(--ink-muted); }
+  .export-aide { margin: 0; font-size: 0.85rem; color: var(--ink-muted); }
+  .export-aide.erreur { color: #B91C1C; }
+  a.btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
 </style>
   <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
        le theme l'emporte sur les reglages locaux herites de l'ancienne
@@ -146,9 +154,25 @@
         <div class="stat-box"><div class="stat-icon" data-icon="folder"></div><div class="val" id="stat-total">0</div><div class="lbl">Dossiers au total</div></div>
       </div>
 
-      <div style="margin-bottom:var(--space-4);">
-        <a class="btn btn-ghost btn-sm" id="export-cases-csv" href="#" target="_blank">Exporter tous les dossiers (CSV)</a>
-        <a class="btn btn-ghost btn-sm" id="export-cases-xlsx" href="#" target="_blank">Excel</a>
+      <!-- Exports : la période choisie s'applique aux trois boutons ; dates
+           vides = tout l'historique. Le suivi complet réunit dossiers et
+           visites, reliés par le numéro de dossier. -->
+      <div class="export-suivi">
+        <div class="export-ligne">
+          <span class="export-libelle">Période :</span>
+          <button type="button" class="btn btn-ghost btn-sm" data-periode="annee">Cette année</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-periode="annee-precedente">Année précédente</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-periode="tout">Tout</button>
+          <input type="date" id="export-debut" aria-label="Début de la période d'export">
+          <span class="export-libelle">→</span>
+          <input type="date" id="export-fin" aria-label="Fin de la période d'export">
+        </div>
+        <div class="export-ligne">
+          <a class="btn btn-secondary btn-sm" id="export-complet" href="#"><span class="icon-slot" data-icon="file-spreadsheet"></span> Exporter le suivi complet (Excel)</a>
+          <a class="btn btn-ghost btn-sm" id="export-cases-csv" href="#" target="_blank">Liste des dossiers (CSV)</a>
+          <a class="btn btn-ghost btn-sm" id="export-cases-xlsx" href="#" target="_blank">Excel</a>
+        </div>
+        <p class="export-aide" id="export-aide" aria-live="polite"></p>
       </div>
 
       <div class="card">
@@ -433,9 +457,50 @@ async function runModuleSearch() {
 // renderIconSlots est maintenant définie une seule fois, dans app_shell.js
 // (partagée par toutes les pages), plus besoin de la redéfinir ici.
 /* ── Tableau de bord ── */
+/* ── Exports du suivi ── */
+// Les trois liens d'export partagent la même période. Une période à
+// l'envers désactive les liens au lieu de produire un fichier vide, que
+// l'agent prendrait pour « aucun dossier ».
+function dateFr(iso) { return iso.split('-').reverse().join('/'); }
+function majLiensExport() {
+  const debut = document.getElementById('export-debut').value;
+  const fin = document.getElementById('export-fin').value;
+  const aide = document.getElementById('export-aide');
+  const liens = {
+    'export-complet': `/api/projects/${projectId}/cases/export-complet`,
+    'export-cases-csv': `/api/projects/${projectId}/cases/export?format=csv`,
+    'export-cases-xlsx': `/api/projects/${projectId}/cases/export?format=xlsx`,
+  };
+  const aLEnvers = debut && fin && debut > fin;
+  for (const [id, base] of Object.entries(liens)) {
+    const a = document.getElementById(id);
+    if (aLEnvers) { a.removeAttribute('href'); a.setAttribute('aria-disabled', 'true'); continue; }
+    const qs = new URLSearchParams();
+    if (debut) qs.set('start', debut);
+    if (fin) qs.set('end', fin);
+    const q = qs.toString();
+    a.href = q ? base + (base.includes('?') ? '&' : '?') + q : base;
+    a.removeAttribute('aria-disabled');
+  }
+  aide.classList.toggle('erreur', !!aLEnvers);
+  if (aLEnvers) aide.textContent = 'La date de début est après la date de fin.';
+  else if (!debut && !fin) aide.textContent = 'Période : tout l\'historique.';
+  else aide.textContent = `Période : ${debut ? 'du ' + dateFr(debut) : 'depuis le début'} ${fin ? 'au ' + dateFr(fin) : 'jusqu\'à aujourd\'hui'}. Les dossiers inclus sont ceux ouverts pendant cette période.`;
+}
+document.querySelectorAll('[data-periode]').forEach(b => b.addEventListener('click', () => {
+  const an = new Date().getFullYear();
+  const choix = b.dataset.periode;
+  const [d, f] = choix === 'annee' ? [`${an}-01-01`, `${an}-12-31`]
+               : choix === 'annee-precedente' ? [`${an - 1}-01-01`, `${an - 1}-12-31`]
+               : ['', ''];
+  document.getElementById('export-debut').value = d;
+  document.getElementById('export-fin').value = f;
+  majLiensExport();
+}));
+['export-debut', 'export-fin'].forEach(id => document.getElementById(id).addEventListener('change', majLiensExport));
+
 async function loadDashboard() {
-  document.getElementById('export-cases-csv').href = `/api/projects/${projectId}/cases/export?format=csv`;
-  document.getElementById('export-cases-xlsx').href = `/api/projects/${projectId}/cases/export?format=xlsx`;
+  majLiensExport();
 
   fetch(`/api/projects/${projectId}/potential-duplicates`, { credentials: 'same-origin' })
     .then(r => r.ok ? r.json() : [])

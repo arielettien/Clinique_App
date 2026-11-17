@@ -67,7 +67,88 @@ def _filtered_submissions(form_id, request):
         query = query.filter(collected_at__gte=datetime.combine(start, time.min))
     if end:
         query = query.filter(collected_at__lte=datetime.combine(end, time.max))
-    return query.select_related("patient").order_by("collected_at")
+    return query.select_related("patient", "case").order_by("collected_at")
+
+
+def colonnes_identite(form, avec_dossier=None):
+    """Colonnes d'identite de l'export « une ligne par evenement », et leurs
+    libelles.
+
+    Le numero de dossier est la cle qui relie une visite a son dossier de
+    suivi — ce que font le record_id de REDCap ou le case_id de CommCare, sur
+    CHAQUE ligne de visite. Sans lui, relier les deux fichiers obligeait a une
+    RECHERCHEV sur le code anonyme. Il n'est ajoute que pour un formulaire du
+    module Suivi : sur une Enquete, aucune fiche n'est rattachee a un dossier,
+    la colonne serait toujours vide. `avec_dossier` force ce choix (l'export
+    complet du Suivi le veut sur toutes ses feuilles)."""
+    if avec_dossier is None:
+        avec_dossier = form.form_type != "survey"
+    colonnes = list(DEFAULT_FIXED_COLUMNS)
+    libelles = dict(DEFAULT_FIXED_LABELS)
+    if avec_dossier:
+        colonnes.insert(colonnes.index("code_anonyme") + 1, "numero_dossier")
+        libelles["numero_dossier"] = "N° de dossier"
+    return colonnes, libelles
+
+
+def lignes_par_evenement(submissions, fields, base_url):
+    """Une ligne par fiche : colonnes d'identite puis reponses brutes (les
+    choix multiples sont eclates plus tard, par _expand_row_and_columns).
+
+    Partagee par l'export d'un formulaire et par l'export complet du Suivi
+    (cases/exports.py), pour que les deux fichiers aient exactement les memes
+    colonnes et les memes conventions."""
+    field_ids = [f["id"] for f in fields if f.get("type") != "note"]
+    # Champs photo/audio/video/fichier : la valeur brute est un identifiant de
+    # fichier, illisible tel quel dans un tableur — on le transforme en adresse
+    # complete, cliquable une fois connecte a l'application (le fichier reste
+    # protege, jamais public).
+    media_field_ids = {f["id"] for f in fields if f.get("type") in MEDIA_FIELD_TYPES}
+
+    # Nombre de depistages de CE patient sur la periode exportee, et dates de
+    # son premier/dernier — calcule une fois sur l'ensemble deja filtre, puis
+    # repete sur chacune de ses lignes. Ces colonnes sont ici, et non dans
+    # l'export "personnes" : suivre un historique dans le temps appartient a
+    # l'export par evenement, "personnes" restant un instantane.
+    per_patient_dates = {}
+    for s in submissions:
+        per_patient_dates.setdefault(s.patient_id, []).append(s.collected_at)
+
+    rows = []
+    for s in submissions:
+        patient = s.patient
+        patient_dates = per_patient_dates[s.patient_id]
+        # Age et sexe sont les seules donnees patient incluses ici : exception
+        # deliberee au principe "aucune donnee personnelle dans les exports",
+        # car ces deux-la sont essentielles a l'analyse et non identifiantes.
+        row = {
+            "id_soumission": s.id,
+            "patient": f"{patient.first_name} {patient.last_name}" if patient else "",
+            # Code anonyme affiche COTE A COTE avec le nom, jamais a sa place :
+            # c'est a l'utilisateur de retirer la colonne "patient" selon la
+            # situation (avant un envoi a un bailleur, par exemple), en
+            # connaissance de cause plutot que via une case "anonymiser".
+            "code_anonyme": patient.anonymous_code if patient else None,
+            "numero_dossier": s.case.case_number if s.case_id and s.case else "",
+            "date": s.collected_at.strftime("%Y-%m-%d %H:%M"),
+            "age": age_at(patient.date_of_birth, s.collected_at.date()) if patient else None,
+            "sexe": patient.sex if patient else None,
+            "nb_depistages_periode": len(patient_dates),
+            "premier_depistage": min(patient_dates).strftime("%Y-%m-%d"),
+            "dernier_depistage": max(patient_dates).strftime("%Y-%m-%d"),
+        }
+        for fid in field_ids:
+            # None = question masquee par une condition d'affichage (non
+            # applicable), a distinguer d'une reponse laissee vide alors que la
+            # question etait bien posee. La conversion en "N/A" est faite plus
+            # loin, pour couvrir aussi les champs a choix multiples eclates en
+            # plusieurs colonnes.
+            value = s.responses.get(fid)
+            if value and fid in media_field_ids:
+                value = f"{base_url}/api/media/{value}"
+            row[fid] = value
+        rows.append(row)
+    return rows
 
 
 def _file_response(content: bytes, media_type: str, filename: str):
@@ -95,63 +176,16 @@ def export_form_data(request, form_id):
 
     selected_questions, selected_identity = _selected_columns(request)
     fields = fields_of(form)
+    colonnes, libelles = colonnes_identite(form)
     if selected_questions is not None:
         fields = [f for f in fields if f.get("id") in selected_questions]
-        fixed_columns = [c for c in DEFAULT_FIXED_COLUMNS if c in selected_identity]
-        fixed_labels = {k: v for k, v in DEFAULT_FIXED_LABELS.items() if k in selected_identity}
+        fixed_columns = [c for c in colonnes if c in selected_identity]
+        fixed_labels = {k: v for k, v in libelles.items() if k in selected_identity}
     else:
-        fixed_columns, fixed_labels = None, None
+        fixed_columns, fixed_labels = colonnes, libelles
 
-    field_ids = [f["id"] for f in fields if f.get("type") != "note"]
-    # Champs photo/audio/video/fichier : la valeur brute est un identifiant de
-    # fichier, illisible tel quel dans un tableur — on le transforme en adresse
-    # complete, cliquable une fois connecte a l'application (le fichier reste
-    # protege, jamais public).
-    media_field_ids = {f["id"] for f in fields if f.get("type") in MEDIA_FIELD_TYPES}
     base_url = request.build_absolute_uri("/").rstrip("/")
-
-    # Nombre de depistages de CE patient sur la periode exportee, et dates de
-    # son premier/dernier — calcule une fois sur l'ensemble deja filtre, puis
-    # repete sur chacune de ses lignes. Ces colonnes sont ici, et non dans
-    # l'export "personnes" : suivre un historique dans le temps appartient a
-    # l'export par evenement, "personnes" restant un instantane.
-    per_patient_dates = {}
-    for s in submissions:
-        per_patient_dates.setdefault(s.patient_id, []).append(s.collected_at)
-
-    rows = []
-    for s in submissions:
-        patient = s.patient
-        patient_dates = per_patient_dates[s.patient_id]
-        # Age et sexe sont les seules donnees patient incluses ici : exception
-        # deliberee au principe "aucune donnee personnelle dans les exports",
-        # car ces deux-la sont essentielles a l'analyse et non identifiantes.
-        row = {
-            "id_soumission": s.id,
-            "patient": f"{patient.first_name} {patient.last_name}" if patient else "",
-            # Code anonyme affiche COTE A COTE avec le nom, jamais a sa place :
-            # c'est a l'utilisateur de retirer la colonne "patient" selon la
-            # situation (avant un envoi a un bailleur, par exemple), en
-            # connaissance de cause plutot que via une case "anonymiser".
-            "code_anonyme": patient.anonymous_code if patient else None,
-            "date": s.collected_at.strftime("%Y-%m-%d %H:%M"),
-            "age": age_at(patient.date_of_birth, s.collected_at.date()) if patient else None,
-            "sexe": patient.sex if patient else None,
-            "nb_depistages_periode": len(patient_dates),
-            "premier_depistage": min(patient_dates).strftime("%Y-%m-%d"),
-            "dernier_depistage": max(patient_dates).strftime("%Y-%m-%d"),
-        }
-        for fid in field_ids:
-            # None = question masquee par une condition d'affichage (non
-            # applicable), a distinguer d'une reponse laissee vide alors que la
-            # question etait bien posee. La conversion en "N/A" est faite plus
-            # loin, pour couvrir aussi les champs a choix multiples eclates en
-            # plusieurs colonnes.
-            value = s.responses.get(fid)
-            if value and fid in media_field_ids:
-                value = f"{base_url}/api/media/{value}"
-            row[fid] = value
-        rows.append(row)
+    rows = lignes_par_evenement(submissions, fields, base_url)
 
     content, media_type, ext = build_data_export_bytes(
         form.name, fields, rows, export_format, fixed_columns, fixed_labels)

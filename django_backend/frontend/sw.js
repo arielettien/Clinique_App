@@ -23,7 +23,7 @@
 // manque. Deux consequences ici : on ne met jamais en cache une reponse
 // issue d'une redirection, et l'ouverture d'une page passe par le reseau
 // d'abord (voir les commentaires plus bas).
-const CACHE_NAME = 'clinique-app-shell-v13';
+const CACHE_NAME = 'clinique-app-shell-v14';
 const APP_SHELL_FILES = [
   '/', '/login.html', '/style.css', '/style_blanc_bleu.css', '/app_shell.js', '/icons.js', '/dexie.min.js', '/offline_db.js',
   '/index.html', '/project_hub.html', '/survey.html', '/follow_up.html',

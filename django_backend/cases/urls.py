@@ -11,6 +11,9 @@ urlpatterns = [
     path("patients/<str:patient_id>/cases", views.patient_cases),
     path("projects/<str:project_id>/cases", views.project_cases),
     path("projects/<str:project_id>/cases/export", exports.export_cases),
+    # Tout le suivi d'une periode (dossiers + une feuille par formulaire de
+    # visite, relies par le numero de dossier) dans un seul classeur Excel.
+    path("projects/<str:project_id>/cases/export-complet", exports.export_suivi_complet),
     path("projects/<str:project_id>/cases/stats", exports.case_stats),
     path("projects/<str:project_id>/export", exports.export_project_summary),
 ]

@@ -10,7 +10,11 @@
 <link rel="stylesheet" href="/style.css">
 <style>
   h1 { font-size: 1.4rem; margin: 4px 0 4px 0; }
-  .toolbar { display: flex; justify-content: space-between; align-items: center; margin: 16px 0; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin: 16px 0; flex-wrap: wrap; gap: 8px; }
+  .export-periode { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .export-periode input[type=date] { min-height: var(--cible-tactile, 44px); }
+  .export-libelle { font-size: 0.85rem; color: var(--ink-muted); }
+  a.btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
   .table-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
   .table-scroll table { min-width: 100%; }
   .data-table th { position: relative; white-space: nowrap; }
@@ -56,7 +60,13 @@
     <h1 id="page-title">📊 Données</h1>
     <div class="toolbar">
       <span class="stat-pill" id="row-count"></span>
-      <div style="display:flex; gap:8px;">
+      <div class="export-periode">
+        <!-- Période d'export : vide = tout l'historique. Le serveur filtrait
+             déjà par date ; seul le choix à l'écran manquait. -->
+        <span class="export-libelle">Exporter du</span>
+        <input type="date" id="export-debut" aria-label="Exporter à partir du">
+        <span class="export-libelle">au</span>
+        <input type="date" id="export-fin" aria-label="Exporter jusqu'au">
         <a class="btn btn-secondary btn-sm" id="export-csv-link" href="#">⬇️ Export CSV</a>
         <a class="btn btn-secondary btn-sm" id="export-xlsx-link" href="#">⬇️ Export Excel</a>
         <a class="btn btn-ghost btn-sm" id="edit-form-link" href="#">✏️ Modifier ce formulaire</a>
@@ -325,8 +335,24 @@ function renderTable() {
   hasReferralField = !!data.has_referral_field;
 
   document.getElementById('page-title').textContent = `📊 ${form.name}`;
-  document.getElementById('export-csv-link').href = `/api/forms/${form.id}/export?format=csv`;
-  document.getElementById('export-xlsx-link').href = `/api/forms/${form.id}/export?format=xlsx`;
+  // Liens d'export recalculés à chaque changement de période. Une période
+  // à l'envers les désactive plutôt que de produire un fichier vide.
+  const majLiensExport = () => {
+    const debut = document.getElementById('export-debut').value;
+    const fin = document.getElementById('export-fin').value;
+    const aLEnvers = debut && fin && debut > fin;
+    for (const [id, fmt] of [['export-csv-link', 'csv'], ['export-xlsx-link', 'xlsx']]) {
+      const a = document.getElementById(id);
+      if (aLEnvers) { a.removeAttribute('href'); a.setAttribute('aria-disabled', 'true'); a.title = 'La date de début est après la date de fin.'; continue; }
+      const qs = new URLSearchParams({ format: fmt });
+      if (debut) qs.set('start', debut);
+      if (fin) qs.set('end', fin);
+      a.href = `/api/forms/${form.id}/export?${qs.toString()}`;
+      a.removeAttribute('aria-disabled'); a.removeAttribute('title');
+    }
+  };
+  ['export-debut', 'export-fin'].forEach(id => document.getElementById(id).addEventListener('change', majLiensExport));
+  majLiensExport();
   document.getElementById('row-count').textContent = `${allSubmissionsCache.length} réponse(s)`;
   if (user.role === 'admin') {
     document.getElementById('edit-form-link').href = `/form_builder.html?form_id=${form.id}`;
