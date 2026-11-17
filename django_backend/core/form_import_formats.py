@@ -109,30 +109,59 @@ def _nom_feuille(xls: pd.ExcelFile, voulu: str):
 
 # --- Détection --------------------------------------------------------------
 
-def detecter(content: bytes, filename: str) -> dict:
+FORMATS_FORCABLES = ("auto", "xlsform", "redcap", "modele", "tableau")
+
+
+def _ressemble_a_redcap(colonnes) -> bool:
+    """Un dictionnaire REDCap se reconnaît à ses deux premières colonnes :
+    "Variable / Field Name" et, plus loin, "Field Type". On compare par début
+    de nom pour ne pas dépendre de la ponctuation exacte d'une version."""
+    normes = [_normaliser_entete(c) for c in colonnes]
+    return any(n.startswith("variable") for n in normes) and any(n.startswith("field_type") for n in normes)
+
+
+def detecter(content: bytes, filename: str, format_force: str = None) -> dict:
     """Dit quel format on a sous les yeux, et ce qu'on y voit. Ne lit que les
-    en-têtes : c'est aussi ce qui alimente le message d'erreur."""
+    en-têtes : c'est aussi ce qui alimente le message d'erreur.
+
+    `format_force` vient du menu « D'où vient ce fichier ? » : l'agent peut
+    imposer un format si la détection se trompait. "auto" ou None = deviner."""
+    force = (format_force or "auto").lower()
+    if force not in FORMATS_FORCABLES:
+        raise ValueError(f"Format inconnu « {format_force} ».")
     info = {"format": "tableau", "feuilles": [], "feuille_lue": None, "colonnes": [],
-            "reconnues": [], "ignorees": []}
+            "reconnues": [], "ignorees": [], "force": force != "auto"}
 
     if filename.lower().endswith(".csv"):
         info["format"] = "csv"
+        if force == "xlsform":
+            raise ValueError("Un export Kobo/XLSForm est un fichier Excel à deux feuilles (survey et choices), "
+                             "pas un CSV.")
         df = pd.read_csv(BytesIO(content), sep=None, engine="python", nrows=0)
+        if force == "redcap" or (force == "auto" and _ressemble_a_redcap(df.columns)):
+            info["format"] = "redcap"
     else:
         with pd.ExcelFile(BytesIO(content)) as xls:
             info["feuilles"] = list(xls.sheet_names)
-            if _nom_feuille(xls, "survey"):
-                info["format"] = "xlsform"
-                info["feuille_lue"] = _nom_feuille(xls, "survey")
-            elif _nom_feuille(xls, "structure"):
-                info["format"] = "modele"
-                info["feuille_lue"] = _nom_feuille(xls, "structure")
+            survey, structure = _nom_feuille(xls, "survey"), _nom_feuille(xls, "structure")
+            if force == "xlsform" or (force == "auto" and survey):
+                if not survey:
+                    raise ValueError("Ce fichier n'a pas de feuille « survey » : ce n'est pas un export "
+                                     "Kobo/XLSForm. Feuilles présentes : " + ", ".join(xls.sheet_names) + ".")
+                info["format"], info["feuille_lue"] = "xlsform", survey
+            elif force == "modele" or (force == "auto" and structure):
+                info["format"], info["feuille_lue"] = "modele", structure or xls.sheet_names[0]
             else:
                 info["feuille_lue"] = xls.sheet_names[0]
             df = pd.read_excel(xls, sheet_name=info["feuille_lue"], nrows=0)
+            if info["format"] == "tableau" and (force == "redcap" or (force == "auto" and _ressemble_a_redcap(df.columns))):
+                info["format"] = "redcap"
 
     info["colonnes"] = [str(c).strip() for c in df.columns]
     _, info["reconnues"], info["ignorees"] = _renommer_colonnes(df)
+    if force == "redcap" and not _ressemble_a_redcap(info["colonnes"]):
+        raise ValueError("Ce fichier n'a pas les colonnes d'un dictionnaire REDCap (« Variable / Field Name », "
+                         "« Field Type »…). Colonnes trouvées : " + ", ".join(info["colonnes"][:8]) + ".")
     return info
 
 
@@ -151,7 +180,16 @@ def _traduire_expression(expr: str, ou: str, avertissements: list, abandonnable:
     pire qu'un import refusé."""
     if not expr:
         return ""
-    sortie = re.sub(r"\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}", r"\1", expr)
+    # Kobo écrit ${champ} ; REDCap écrit [champ], et [champ(3)] = '1' pour
+    # "la case 3 de ce choix multiple est cochée". Les deux notations ne se
+    # croisent jamais dans un même fichier, on peut donc les traiter ensemble.
+    sortie = re.sub(r"\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*([^)\]]+?)\s*\)\s*\]\s*(=|==)\s*'?1'?",
+                    r"selected(\1, '\2')", expr)
+    sortie = re.sub(r"\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*([^)\]]+?)\s*\)\s*\]\s*(=|==)\s*'?0'?",
+                    r"not selected(\1, '\2')", sortie)
+    sortie = re.sub(r"\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*\]", r"\1", sortie)
+    sortie = re.sub(r"\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}", r"\1", sortie)
+    sortie = sortie.replace("<>", "!=")
     sortie = re.sub(r"(?<![=!<>])=(?!=)", "==", sortie)   # "=" seul → "==", sans toucher ==, !=, <=, >=
     sortie = re.sub(r"\bdiv\b", "/", sortie)
 
@@ -317,17 +355,112 @@ def _convertir_xlsform(content: bytes, feuille_survey: str) -> tuple:
     return lignes, choix, avertissements
 
 
+# --- REDCap -----------------------------------------------------------------
+
+# Colonnes du dictionnaire de données REDCap, reconnues par DÉBUT de nom : la
+# ponctuation exacte ("Variable / Field Name", "Branching Logic (Show field
+# only if...)") varie un peu selon les versions, le début non.
+_REDCAP_COLONNES = {
+    "id": "variable", "formulaire": "form_name", "section": "section_header", "type": "field_type",
+    "label": "field_label", "choix": "choices", "hint": "field_note", "validation": "text_validation_type",
+    "min": "text_validation_min", "max": "text_validation_max", "relevant": "branching",
+    "required": "required",
+}
+_REDCAP_TYPES = {
+    "text": "text", "notes": "text", "radio": "select_one", "dropdown": "select_one",
+    "checkbox": "select_multiple", "yesno": "boolean", "truefalse": "boolean", "calc": "calculated",
+    "descriptive": "note", "slider": "number",
+}
+_REDCAP_VALIDATIONS = {"integer": "number", "number": "decimal", "number_1dp": "decimal",
+                       "number_2dp": "decimal", "date_dmy": "date", "date_mdy": "date", "date_ymd": "date",
+                       "datetime_dmy": "date", "datetime_mdy": "date", "datetime_ymd": "date"}
+
+
+def _colonne_redcap(df: pd.DataFrame, debut: str):
+    for c in df.columns:
+        if _normaliser_entete(c).startswith(debut):
+            return c
+    return None
+
+
+def _convertir_redcap(content: bytes, filename: str, feuille) -> tuple:
+    """Dictionnaire de données REDCap → lignes de notre modèle. Chaque
+    instrument (colonne "Form Name") devient une section ; un "Section Header"
+    devient une note, pour garder le découpage visible à l'écran."""
+    avertissements: list = []
+    if filename.lower().endswith(".csv"):
+        df = pd.read_csv(BytesIO(content), sep=None, engine="python", dtype=object)
+    else:
+        df = pd.read_excel(BytesIO(content), sheet_name=feuille, dtype=object)
+    col = {cle: _colonne_redcap(df, debut) for cle, debut in _REDCAP_COLONNES.items()}
+
+    def val(r, cle):
+        return _clean(r.get(col[cle])) if col[cle] else ""
+
+    lignes: list = []
+    formulaire_courant = None
+    for r in df.to_dict(orient="records"):
+        nom = val(r, "id")
+        if not nom:
+            continue
+        formulaire = val(r, "formulaire")
+        if formulaire != formulaire_courant:
+            if formulaire_courant is not None:
+                lignes.append({"type": "end_group", "label": ""})
+            lignes.append({"type": "begin_group", "label": formulaire.replace("_", " ").capitalize() or "Questions"})
+            formulaire_courant = formulaire
+        section = val(r, "section")
+        if section:
+            lignes.append({"id": f"{nom}_titre", "type": "note", "label": section})
+
+        type_redcap = val(r, "type").lower()
+        if type_redcap not in _REDCAP_TYPES:
+            avertissements.append(f"« {nom} » : type REDCap « {type_redcap} » sans équivalent — question retirée.")
+            continue
+        type_app = _REDCAP_TYPES[type_redcap]
+        validation = val(r, "validation").lower()
+        if type_redcap == "text" and validation:
+            type_app = _REDCAP_VALIDATIONS.get(validation, "text")
+            if validation not in _REDCAP_VALIDATIONS:
+                avertissements.append(f"« {nom} » : validation « {validation} » non reprise (texte libre).")
+
+        ligne = {"id": nom, "type": type_app, "label": val(r, "label") or nom,
+                 "hint": val(r, "hint"),
+                 "required": "oui" if val(r, "required").lower() in ("y", "yes", "oui", "true", "1") else ""}
+        if type_app in ("number", "decimal"):
+            ligne["min"], ligne["max"] = val(r, "min"), val(r, "max")
+        if type_app in ("select_one", "select_multiple"):
+            # "1, Oui | 2, Non" → "1:Oui|2:Non", la notation de notre modèle.
+            options = []
+            for part in val(r, "choix").split("|"):
+                code, _, libelle = part.strip().partition(",")
+                if code.strip():
+                    options.append(f"{code.strip()}:{libelle.strip() or code.strip()}")
+            if not options:
+                avertissements.append(f"« {nom} » : aucune option trouvée dans la colonne des choix.")
+            ligne["options"] = "|".join(options)
+        if type_app == "calculated":
+            ligne["formula"] = _traduire_expression(val(r, "choix"), f"calcul « {nom} »", avertissements, False)
+        ligne["relevant"] = _traduire_expression(val(r, "relevant"), f"affichage « {nom} »", avertissements, True)
+        lignes.append(ligne)
+    if formulaire_courant is not None:
+        lignes.append({"type": "end_group", "label": ""})
+    return lignes, {}, avertissements
+
+
 # --- Point d'entrée ---------------------------------------------------------
 
-def lire_structure(content: bytes, filename: str) -> tuple:
+def lire_structure(content: bytes, filename: str, format_force: str = None) -> tuple:
     """Renvoie (sections, choice_lists, rapport). Le rapport dit quel format a
     été reconnu et liste les avertissements à montrer à l'agent : ce qui a été
     adapté, retiré ou inventé pendant la conversion ne doit jamais être
     silencieux sur un questionnaire médical."""
-    info = detecter(content, filename)
+    info = detecter(content, filename, format_force)
 
     if info["format"] == "xlsform":
         lignes, choice_lists, avertissements = _convertir_xlsform(content, info["feuille_lue"])
+    elif info["format"] == "redcap":
+        lignes, choice_lists, avertissements = _convertir_redcap(content, filename, info["feuille_lue"])
     else:
         if info["format"] == "csv":
             df = pd.read_csv(BytesIO(content), sep=None, engine="python")
@@ -347,6 +480,7 @@ def lire_structure(content: bytes, filename: str) -> tuple:
 NOMS_FORMATS = {
     "modele": "modèle de l'application (feuille « Structure »)",
     "xlsform": "export Kobo / XLSForm (feuille « survey »)",
+    "redcap": "dictionnaire de données REDCap",
     "csv": "fichier CSV",
     "tableau": "tableau simple (première feuille)",
 }

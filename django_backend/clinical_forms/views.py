@@ -195,9 +195,12 @@ def import_form(request):
 
     content = uploaded.read()
     try:
-        # Reconnait le format tout seul (notre modele, export Kobo, colonnes
-        # en francais...) : voir core/form_import_formats.py pour le pourquoi.
-        sections, choice_lists, rapport = lire_structure(content, uploaded.name or "formulaire.xlsx")
+        # Reconnait le format tout seul (notre modele, export Kobo, REDCap,
+        # colonnes en francais...) : voir core/form_import_formats.py pour le
+        # pourquoi. `format` vient du menu « D'ou vient ce fichier ? » et ne
+        # sert qu'a forcer un format si la detection se trompait.
+        sections, choice_lists, rapport = lire_structure(
+            content, uploaded.name or "formulaire.xlsx", request.data.get("format") or None)
     except Exception as e:  # noqa: BLE001 — message remonte tel quel a l'agent
         return Response({"detail": f"Impossible de lire le fichier : {e}"},
                         status=status.HTTP_422_UNPROCESSABLE_ENTITY)
@@ -206,8 +209,10 @@ def import_form(request):
     if total_fields == 0:
         # Dire ce qui a ete VU (feuilles, colonnes), pas seulement ce qui
         # etait attendu : l'ancien message envoyait verifier le contenu d'une
-        # colonne qui, en realite, n'existait pas sous ce nom.
-        return Response({"detail": expliquer_echec(rapport)},
+        # colonne qui, en realite, n'existait pas sous ce nom. `conseil` permet
+        # a la page de proposer directement l'import d'etude, qui est la bonne
+        # porte pour un fichier de REPONSES (Google Forms, Microsoft Forms...).
+        return Response({"detail": expliquer_echec(rapport), "conseil": "etude"},
                         status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
     definition = {"sections": sections}

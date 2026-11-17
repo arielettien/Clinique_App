@@ -533,7 +533,8 @@ class ImportStructureTests(BaseApiTest):
     def test_echec_explique_ce_qui_a_ete_vu(self):
         """Un fichier de reponses (une ligne par patient) n'est pas une
         structure : le message doit nommer les colonnes vues et ce qui manque,
-        pas accuser une colonne qui n'existe pas."""
+        pas accuser une colonne qui n'existe pas — et orienter vers l'import
+        d'etude, qui est la bonne porte pour ce genre de fichier."""
         contenu = self._xlsx({"Feuil1": [
             {"Nom": "Kone", "Prénom": "Awa", "Téléphone": "0700000000"},
         ]})
@@ -543,6 +544,86 @@ class ImportStructureTests(BaseApiTest):
         self.assertIn("Colonnes trouvées : Nom, Prénom, Téléphone", detail)
         self.assertIn("label", detail)
         self.assertIn("RÉPONSES", detail)
+        self.assertEqual(reponse.json()["conseil"], "etude")
+
+    def test_dictionnaire_redcap(self):
+        """Dictionnaire REDCap (ce qu'un partenaire de recherche enverrait) :
+        instruments → sections, choix "1, Oui | 2, Non", cases a cocher,
+        oui/non, calcul, logique d'affichage [champ] = '1'."""
+        lignes = [
+            {"Variable / Field Name": "age", "Form Name": "inclusion", "Section Header": "Identité",
+             "Field Type": "text", "Field Label": "Âge", "Choices, Calculations, OR Slider Labels": "",
+             "Field Note": "en années révolues", "Text Validation Type OR Show Slider Number": "integer",
+             "Text Validation Min": "15", "Text Validation Max": "80", "Identifier?": "",
+             "Branching Logic (Show field only if...)": "", "Required Field?": "y"},
+            {"Variable / Field Name": "vih", "Form Name": "inclusion", "Section Header": "",
+             "Field Type": "radio", "Field Label": "Statut VIH",
+             "Choices, Calculations, OR Slider Labels": "1, Positif | 2, Négatif | 3, Inconnu",
+             "Field Note": "", "Text Validation Type OR Show Slider Number": "", "Text Validation Min": "",
+             "Text Validation Max": "", "Identifier?": "", "Branching Logic (Show field only if...)": "",
+             "Required Field?": ""},
+            {"Variable / Field Name": "arv", "Form Name": "inclusion", "Section Header": "",
+             "Field Type": "yesno", "Field Label": "Sous ARV ?", "Choices, Calculations, OR Slider Labels": "",
+             "Field Note": "", "Text Validation Type OR Show Slider Number": "", "Text Validation Min": "",
+             "Text Validation Max": "", "Identifier?": "",
+             "Branching Logic (Show field only if...)": "[vih] = '1'", "Required Field?": ""},
+            {"Variable / Field Name": "sympt", "Form Name": "visite", "Section Header": "",
+             "Field Type": "checkbox", "Field Label": "Symptômes",
+             "Choices, Calculations, OR Slider Labels": "1, Fièvre | 2, Toux", "Field Note": "",
+             "Text Validation Type OR Show Slider Number": "", "Text Validation Min": "",
+             "Text Validation Max": "", "Identifier?": "", "Branching Logic (Show field only if...)": "",
+             "Required Field?": ""},
+            {"Variable / Field Name": "detail_toux", "Form Name": "visite", "Section Header": "",
+             "Field Type": "notes", "Field Label": "Précisez la toux",
+             "Choices, Calculations, OR Slider Labels": "", "Field Note": "",
+             "Text Validation Type OR Show Slider Number": "", "Text Validation Min": "",
+             "Text Validation Max": "", "Identifier?": "",
+             "Branching Logic (Show field only if...)": "[sympt(2)] = '1'", "Required Field?": ""},
+            {"Variable / Field Name": "age_x2", "Form Name": "visite", "Section Header": "",
+             "Field Type": "calc", "Field Label": "Âge doublé",
+             "Choices, Calculations, OR Slider Labels": "[age] * 2", "Field Note": "",
+             "Text Validation Type OR Show Slider Number": "", "Text Validation Min": "",
+             "Text Validation Max": "", "Identifier?": "", "Branching Logic (Show field only if...)": "",
+             "Required Field?": ""},
+        ]
+        contenu = self._xlsx({"Feuil1": lignes})
+        reponse = self._importer(contenu, nom="dictionnaire.xlsx")
+        self.assertEqual(reponse.status_code, 201, reponse.content)
+        self.assertEqual(reponse.json()["format"], "redcap")
+        champs, definition = self._champs(reponse.json()["id"])
+        self.assertEqual([s["title"] for s in definition["sections"]], ["Inclusion", "Visite"])
+        self.assertEqual(champs["age"]["type"], "number")
+        self.assertEqual(champs["age"]["validation"], {"min": 15.0, "max": 80.0})
+        self.assertTrue(champs["age"]["required"])
+        self.assertEqual(champs["age"]["hint"], "en années révolues")
+        self.assertEqual(champs["age_titre"]["type"], "note")          # le Section Header reste visible
+        self.assertEqual(champs["vih"]["type"], "select_one")
+        self.assertEqual(champs["vih"]["options"][1], {"value": "2", "label": "Négatif"})
+        self.assertEqual(champs["arv"]["type"], "boolean")
+        self.assertEqual(champs["arv"]["relevant"], "vih == '1'")
+        self.assertEqual(champs["sympt"]["type"], "select_multiple")
+        self.assertEqual(champs["detail_toux"]["relevant"], "selected(sympt, '2')")
+        self.assertEqual(champs["age_x2"]["formula"], "age * 2")
+
+    def test_format_force(self):
+        """Le menu « D'ou vient ce fichier ? » peut imposer un format. Forcer
+        un format qui ne correspond pas au fichier doit etre refuse avec un
+        message clair, pas produire un formulaire vide ou absurde."""
+        kobo = self._xlsx({"survey": [{"type": "text", "name": "nom", "label": "Nom"}],
+                           "choices": [{"list_name": "x", "name": "a", "label": "A"}]})
+        self.assertEqual(self.client.post(
+            "/api/forms/import",
+            {"project_id": self.project["id"], "name": "Force", "format": "xlsform",
+             "file": SimpleUploadedFile("f.xlsx", kobo)}).status_code, 201)
+
+        modele = self._xlsx({"Structure": [{"id": "poids", "type": "number", "label": "Poids"}]})
+        reponse = self.client.post(
+            "/api/forms/import",
+            {"project_id": self.project["id"], "name": "Force2", "format": "xlsform",
+             "file": SimpleUploadedFile("f.xlsx", modele)})
+        self.assertEqual(reponse.status_code, 422)
+        self.assertIn("survey", reponse.json()["detail"])
+        self.assertIn("Structure", reponse.json()["detail"])      # les feuilles presentes sont nommees
 
 
 class ImportEtudeTests(BaseApiTest):

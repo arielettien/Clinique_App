@@ -14,10 +14,18 @@ L'application reconnaît le format toute seule. Trois cas :
 |---|---|
 | **Un export Kobo Toolbox** (feuilles `survey`, `choices`, `settings`) | Importe-le tel quel. L'application fait la conversion. |
 | **Le modèle de l'application** (feuille `Structure`, colonnes `id`, `type`, `label`…) | C'est le format natif. Pour l'obtenir : ouvre un formulaire existant → **Télécharger la structure**, puis modifie-le dans Excel. |
+| **Un dictionnaire de données REDCap** (colonnes `Variable / Field Name`, `Field Type`, `Field Label`, `Choices…`) | Accepté. Chaque instrument devient une section, les choix `1, Oui \| 2, Non` deviennent des options, la logique `[champ] = '1'` devient une condition d'affichage. |
 | **Un tableau simple** avec des en-têtes en français (`Identifiant`, `Type`, `Libellé`, `Obligatoire`…) | Accepté aussi. La seule colonne indispensable est le **libellé** de la question. |
+| **Google Forms, Microsoft Forms** | Ces outils **n'exportent pas la structure** d'un questionnaire, seulement les réponses. Passe par **Importer une étude** (section 5), qui reconstruit le questionnaire à partir du fichier de réponses. |
 
-Un fichier CSV fonctionne pour les deux derniers cas, mais sans listes de choix
-réutilisables (un CSV n'a qu'une seule feuille).
+Un fichier CSV fonctionne pour le modèle, REDCap et le tableau simple, mais sans
+listes de choix réutilisables (un CSV n'a qu'une seule feuille).
+
+**Le menu « D'où vient ce fichier ? »** s'ouvre au clic sur *Importer*. Laisse
+« détecter automatiquement » : la reconnaissance est fiable, chaque format a une
+forme qui ne trompe pas. Les autres choix servent à forcer un format si la détection
+se trompait, et l'entrée *Google Forms / Microsoft Forms* t'envoie directement au bon
+endroit. Après l'import, la fenêtre indique le format reconnu.
 
 ## 2. Ce que l'import fait avec un fichier Kobo
 
@@ -57,7 +65,7 @@ Les trois causes fréquentes :
 
 | Le message dit… | Cause | Solution |
 |---|---|---|
-| « Colonnes trouvées : Nom, Prénom, Téléphone, … » et « Il manque la colonne du libellé » | C'est un **fichier de réponses** (une ligne par patient), pas une structure | Ce n'est pas le bon fichier. Il faut la structure du questionnaire, pas les données. |
+| « Colonnes trouvées : Nom, Prénom, Téléphone, … » et « Il manque la colonne du libellé » | C'est un **fichier de réponses** (une ligne par patient), pas une structure | L'application te propose alors d'ouvrir **Importer une étude** : accepte, c'est la bonne porte pour ce fichier. |
 | « Colonnes trouvées : aucune » | La feuille lue est vide, ou les en-têtes ne sont pas sur la première ligne | Supprime les lignes de titre au-dessus des en-têtes. |
 | « Feuille lue : Feuil1 » alors que ta structure est sur une autre feuille | Sans feuille nommée `Structure` ou `survey`, l'application lit la **première** feuille | Renomme la bonne feuille `Structure`, ou mets-la en premier. |
 

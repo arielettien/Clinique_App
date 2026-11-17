@@ -117,6 +117,14 @@ is real business logic — a `services.py` kept separate from the HTTP layer.
     before `spreadsheet_io.rows_to_sections`. Anything adapted, dropped or invented during conversion is
     returned as `avertissements` and shown to the user — never silent on a medical form. When nothing is
     recognised, `expliquer_echec` reports the sheets and columns actually seen, not just what was expected.
+    Also reads a REDCap data dictionary (CSV/xlsx; columns matched by normalised *prefix* — `variable…`,
+    `field_type`, `choices…`, `branching…` — so punctuation differences between REDCap versions don't
+    matter; instruments → sections, `1, Oui | 2, Non` → options, `[x] = '1'` / `[x(2)] = '1'` →
+    `x == '1'` / `selected(x, '2')`). The page's "D'où vient ce fichier ?" menu may pass `format` to force a
+    parser (`FORMATS_FORCABLES`); a forced format that doesn't match the file is refused with a message
+    naming the sheets/columns. Google Forms / Microsoft Forms have **no structure export** — the menu and
+    the 422 `conseil: "etude"` both route those users to `importer_etude.html`. EpiData was deliberately
+    left out (no sample file, XML schema unstable across versions).
   - `etude_import.py` — import of an already-completed study from its *answers* file (Google Forms / Kobo
     data export: one row per respondent, one column per question). The header row becomes the form, the
     rows become patients + submissions. Framework-free: `analyser()` proposes a role per column (identity

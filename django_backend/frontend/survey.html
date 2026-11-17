@@ -122,6 +122,9 @@
     width: 90%; max-width: 420px; box-shadow: var(--shadow-md);
   }
   .modal-box h3 { margin-top: 0; }
+  .source-list label { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2) 0; min-height: var(--cible-tactile, 44px); cursor: pointer; }
+  .source-list input { margin-top: 4px; }
+  .source-note { color: var(--ink-muted); font-size: 0.85rem; }
   .form-picker-list { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-4) 0; max-height: 320px; overflow-y: auto; }
   .form-picker-item {
     display: block; width: 100%; text-align: left; box-sizing: border-box;
@@ -326,6 +329,33 @@
     <h3 id="form-picker-title">Choisir un formulaire</h3>
     <div class="form-picker-list" id="form-picker-list"></div>
     <button class="btn btn-ghost" onclick="closeFormPicker()">Annuler</button>
+  </div>
+</div>
+
+<!-- Menu d'orientation de l'import : la détection du format est automatique,
+     ce menu sert à dire ce qui est accepté, à forcer un format si la
+     détection se trompait, et surtout à rediriger Google/Microsoft Forms —
+     ces outils n'exportent pas la structure d'un questionnaire, seulement les
+     réponses : leur porte, c'est « Importer une étude ». -->
+<div class="modal-overlay" id="source-picker-overlay">
+  <div class="modal-box">
+    <h3>D'où vient ce fichier ?</h3>
+    <div class="source-list">
+      <label><input type="radio" name="source-format" value="auto" checked> <b>Je ne sais pas — détecter automatiquement</b> <span class="source-note">(recommandé)</span></label>
+      <label><input type="radio" name="source-format" value="xlsform"> Kobo Toolbox, ODK, SurveyCTO <span class="source-note">(fichier XLSForm : feuilles survey + choices)</span></label>
+      <label><input type="radio" name="source-format" value="redcap"> REDCap <span class="source-note">(dictionnaire de données)</span></label>
+      <label><input type="radio" name="source-format" value="modele"> Modèle Clinique App <span class="source-note">(téléchargé depuis un formulaire existant)</span></label>
+      <label><input type="radio" name="source-format" value="reponses"> Google Forms, Microsoft Forms</label>
+    </div>
+    <p class="source-note" id="source-explication" style="display:none; margin:var(--space-3) 0;">
+      Ces outils n'exportent pas la structure d'un questionnaire, seulement les <b>réponses</b> (une ligne par personne).
+      L'application sait reconstruire le questionnaire — et charger les réponses — à partir de ce fichier :
+      c'est <b>Importer une étude</b>.
+    </p>
+    <div style="display:flex; gap:var(--space-2); flex-wrap:wrap; margin-top:var(--space-3);">
+      <button class="btn btn-primary" id="source-continuer" onclick="continuerImport()">Choisir le fichier</button>
+      <button class="btn btn-ghost" onclick="closeSourcePicker()">Annuler</button>
+    </div>
   </div>
 </div>
 
@@ -698,7 +728,26 @@ async function loadFormsList() {
   }
 }
 
-function importForm() { document.getElementById('import-file').click(); }
+let formatImportChoisi = 'auto';
+
+function importForm() {
+  document.getElementById('source-picker-overlay').classList.add('open');
+}
+function closeSourcePicker() {
+  document.getElementById('source-picker-overlay').classList.remove('open');
+}
+document.querySelectorAll('input[name="source-format"]').forEach(r => r.addEventListener('change', () => {
+  const reponses = r.value === 'reponses';
+  document.getElementById('source-explication').style.display = reponses ? 'block' : 'none';
+  document.getElementById('source-continuer').textContent = reponses ? 'Aller à « Importer une étude »' : 'Choisir le fichier';
+}));
+function continuerImport() {
+  const choix = document.querySelector('input[name="source-format"]:checked').value;
+  closeSourcePicker();
+  if (choix === 'reponses') { location.href = '/importer_etude.html?project_id=' + projectId; return; }
+  formatImportChoisi = choix;
+  document.getElementById('import-file').click();
+}
 
 async function deleteEnqueteForm(formId) {
   if (!confirm("Supprimer ce formulaire ? S'il a déjà des réponses enregistrées, il sera archivé plutôt que supprimé pour ne rien perdre.")) return;
@@ -722,6 +771,7 @@ async function handleImport(input) {
   formData.append('project_id', projectId);
   formData.append('name', name);
   formData.append('file', file);
+  if (formatImportChoisi && formatImportChoisi !== 'auto') formData.append('format', formatImportChoisi);
   const res = await fetch('/api/forms/import', {
     method: 'POST', credentials: 'same-origin', body: formData
   });
@@ -738,9 +788,18 @@ async function handleImport(input) {
   else {
     const err = await res.json().catch(() => ({}));
     const detail = Array.isArray(err.detail) ? err.detail.map(d => d.msg || JSON.stringify(d)).join(' ; ') : (err.detail || 'Import échoué');
-    alert('Erreur : ' + detail);
+    if (err.conseil === 'etude') {
+      // Aucune question reconnue : c'est très souvent un fichier de réponses
+      // (Google Forms...). On propose la bonne porte au lieu d'un cul-de-sac.
+      if (confirm('Erreur : ' + detail + '\n\nSi ce fichier contient des RÉPONSES (une ligne par personne), ouvrir « Importer une étude » maintenant ?')) {
+        location.href = '/importer_etude.html?project_id=' + projectId;
+      }
+    } else {
+      alert('Erreur : ' + detail);
+    }
   }
   input.value = '';
+  formatImportChoisi = 'auto';
 }
 
 /* ═════════════════ DONNÉES ═════════════════ */
