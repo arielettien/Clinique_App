@@ -4,7 +4,13 @@
 #
 # Ce script fait UNE seule chose : sauvegarder la base de donnees dans un
 # fichier .sql transferable. La copie des fichiers du projet (et surtout du
-# dossier backend/uploads/) se fait ensuite manuellement — voir DEPLOIEMENT.md.
+# dossier django_backend/uploads/) se fait ensuite manuellement — voir
+# DEPLOIEMENT.md.
+#
+# Attention aux chemins : depuis le passage de FastAPI a Django, tout vit dans
+# django_backend/ et non plus dans backend/. Avec l'ancien chemin, ce script
+# annoncait « aucun media enregistre » alors que les photos et signatures
+# existaient bien — et elles risquaient de ne pas etre transferees.
 #
 # Il ne modifie ni ne supprime rien : le PC Windows continue de fonctionner
 # exactement comme avant.
@@ -69,15 +75,15 @@ if (Test-Path ".\.env") {
     $problemes++
 }
 
-if (Test-Path ".\backend\uploads") {
-    $nbFichiers = (Get-ChildItem ".\backend\uploads" -File -ErrorAction SilentlyContinue).Count
+if (Test-Path ".\django_backend\uploads") {
+    $nbFichiers = (Get-ChildItem ".\django_backend\uploads" -File -Recurse -ErrorAction SilentlyContinue).Count
     $poidsMo = 0
     if ($nbFichiers -gt 0) {
-        $poidsMo = [math]::Round(((Get-ChildItem ".\backend\uploads" -File | Measure-Object -Property Length -Sum).Sum / 1MB), 1)
+        $poidsMo = [math]::Round(((Get-ChildItem ".\django_backend\uploads" -File -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB), 1)
     }
-    Write-Host "  [OK] backend/uploads/      ($nbFichiers fichier(s), $poidsMo Mo - photos et signatures)" -ForegroundColor Green
+    Write-Host "  [OK] django_backend/uploads/ ($nbFichiers fichier(s), $poidsMo Mo - photos et signatures)" -ForegroundColor Green
 } else {
-    Write-Host "  [--] backend/uploads/      (absent : aucun media enregistre pour l'instant)" -ForegroundColor Yellow
+    Write-Host "  [--] django_backend/uploads/ (absent : aucun media enregistre pour l'instant)" -ForegroundColor Yellow
 }
 
 if (Test-Path ".\backups") {
@@ -92,7 +98,7 @@ Write-Host "  - TOUT le dossier du projet, y compris le fichier cache .env"
 Write-Host "  - le fichier $nomFichier qui vient d'etre cree"
 Write-Host ""
 Write-Host "A NE PAS transferer (sera regenere sur le serveur) :" -ForegroundColor White
-Write-Host "  - backend/certs/   (certificat lie a l'ancienne adresse IP)"
+Write-Host "  - django_backend/certs/   (certificat lie a l'ancienne adresse IP)"
 Write-Host ""
 
 if ($problemes -gt 0) {

@@ -302,7 +302,7 @@ sudo umount /media/usb
 ```bash
 cd ~/clinique-app
 ls -la .env
-ls backend/uploads | wc -l
+ls django_backend/uploads | wc -l
 ls *.sql
 ```
 
@@ -328,12 +328,17 @@ particulier `SECRET_KEY`, `POSTGRES_PASSWORD` et
 
 ```
 COOKIE_SECURE=false
-UVICORN_RELOAD=false
+APP_RELOAD=false
 ```
 
 > `COOKIE_SECURE` restera à `false` jusqu'à l'étape 10, le temps de mettre le
-> HTTPS en place. `UVICORN_RELOAD=false` désactive le rechargement automatique
-> du code, inutile sur un serveur en production.
+> HTTPS en place.
+>
+> ⚠️ **`APP_RELOAD=false` est indispensable sur le serveur.** Sans cette ligne,
+> l'application tourne en mode développement : elle recharge les pages toutes
+> seules et, pour ça, **désactive le mode hors-ligne** sur tous les téléphones.
+> Si ton `.env` contient encore `UVICORN_RELOAD=false` (nom de l'ancienne
+> version), cette ligne ne sert plus à rien : remplace-la par `APP_RELOAD=false`.
 
 Enregistre (`Ctrl+O`, `Entrée`) et quitte (`Ctrl+X`).
 
@@ -384,7 +389,7 @@ jamais (le navigateur l'interdit sur une adresse IP en `http://`).
 
 Génère le certificat pour l'adresse fixe du serveur :
 ```bash
-docker compose exec api python generate_cert.py 192.168.1.50
+docker compose exec api python manage.py generate_cert 192.168.1.50
 docker compose restart api
 docker compose logs --tail=5 api
 ```
@@ -483,10 +488,11 @@ devient injoignable).
 | `permission denied` sur une commande `docker` | Tu ne t'es pas déconnecté/reconnecté après l'étape 6. Fais `exit` puis reconnecte-toi en SSH. |
 | L'application n'est pas joignable depuis un autre appareil | Vérifie `docker compose ps` (tout doit être `Up`), puis `sudo ufw status` (le port 8000 doit être autorisé), puis que l'appareil est bien sur le même réseau. |
 | « connexion non privée » dans le navigateur | Normal, certificat auto-signé. Accepter une fois par appareil. |
-| Le mode hors-ligne ne s'active pas sur téléphone | L'adresse doit être en `https://`, pas `http://`. Revois l'étape 10. |
+| Le mode hors-ligne ne s'active pas sur téléphone | L'adresse doit être en `https://`, pas `http://` : `docker compose logs api \| grep demarrage` doit dire « lancement en HTTPS ». Sinon, revois l'étape 10. |
+| Le mode hors-ligne a disparu après une mise à jour | Le `.env` du serveur n'a pas `APP_RELOAD=false` (étape 8) : l'application est en mode développement. Ajoute la ligne, puis `docker compose up -d`. |
 | Un service ne démarre pas | `docker compose logs <nom_du_service>` (ex : `docker compose logs api`) affiche la raison. |
 | Impossible de se connecter en SSH | Vérifie que « OpenSSH server » a bien été coché à l'étape 2, et que la règle de pare-feu du port 22 existe. |
-| Les photos/signatures ne s'affichent pas | Le dossier `backend/uploads/` n'a pas été transféré (étape 7). Recopie-le. |
+| Les photos/signatures ne s'affichent pas | Le dossier `django_backend/uploads/` n'a pas été transféré (étape 7). Recopie-le. |
 
 **En dernier recours :** tant que tu n'as rien supprimé, le PC Windows
 fonctionne toujours comme avant. Tu peux y retourner et reprendre le
@@ -524,3 +530,30 @@ docker compose restart api         # redémarrer l'application
 docker compose up -d               # tout démarrer
 df -h                              # espace disque restant
 ```
+
+### Mettre à jour l'application
+
+À faire chaque fois que de nouvelles modifications ont été envoyées sur GitHub.
+
+```bash
+cd ~/clinique-app
+
+grep APP_RELOAD .env               # doit afficher APP_RELOAD=false (voir étape 8)
+git pull
+docker compose up -d               # « up -d » et non « restart » : prend aussi en compte
+                                   # un changement de docker-compose.yml
+docker compose logs api | grep demarrage
+```
+
+**✅ Vérification :**
+
+- la dernière ligne affichée dit « lancement en **HTTPS** » ;
+- ouvre `https://<adresse-du-serveur>:8000/sw.js` dans un navigateur : la
+  première ligne ne doit **pas** être `// Service Worker NEUTRALISE`. Si c'est
+  le cas, l'application est en mode développement et le mode hors-ligne est
+  coupé : vérifie `APP_RELOAD=false` dans le `.env`, puis refais
+  `docker compose up -d`.
+
+> Si `git pull` échoue avec « Failed to connect to github.com », c'est le réseau
+> qui ne joint pas GitHub à ce moment-là. Réessaie plus tard, ou passe le serveur
+> sur une autre connexion le temps de la mise à jour.
