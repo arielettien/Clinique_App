@@ -23,6 +23,64 @@ def fields_of(form: Form) -> list:
     return fields
 
 
+def display_schema_of(form) -> list:
+    """Ce qu'il faut pour RELIRE une soumission comme elle a ete saisie : les
+    sections et les champs dans l'ordre du formulaire, le libelle de chaque
+    champ, et le libelle de chaque option.
+
+    Sans ca, un ecran qui relit une soumission ne dispose que du JSON brut des
+    reponses. Il affiche alors l'identifiant technique du champ
+    ("perimetre_brachial_mm") et la valeur stockee ("cs_abobo_sud"), dans
+    l'ordre des cles JSON — c'est-a-dire ni le texte lu par l'agent, ni l'ordre
+    dans lequel il l'a rempli. Sur un dossier medical, c'est une perte de sens,
+    pas seulement une question d'esthetique.
+
+    Les listes de choix partagees (list_name -> choice_lists) sont resolues
+    ici, une fois, cote serveur : chaque ecran n'a pas a refaire ce travail.
+
+    Les champs de type "note" sont ecartes : ce sont des textes d'explication
+    affiches pendant la saisie, ils ne portent aucune reponse.
+    """
+    if not form:
+        return []
+    definition = form.definition or {}
+    choice_lists = definition.get("choice_lists") or {}
+
+    sections = []
+    for section in definition.get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        fields = []
+        for f in section.get("fields") or []:
+            if not isinstance(f, dict) or not f.get("id") or f.get("type") == "note":
+                continue
+            entry = {
+                "id": f["id"],
+                "label": f.get("label") or f["id"],
+                "type": f.get("type") or "text",
+            }
+            # "options" en clair sur le champ, sinon la liste partagee designee
+            # par list_name — les deux formes existent dans les formulaires
+            # importes depuis Kobo comme dans ceux construits dans l'app.
+            options = f.get("options")
+            if not options and f.get("list_name"):
+                options = choice_lists.get(f["list_name"])
+            if options:
+                entry["options"] = {
+                    str(o["value"]): (o.get("label") or str(o["value"]))
+                    for o in options
+                    if isinstance(o, dict) and o.get("value") is not None
+                }
+            fields.append(entry)
+        if fields:
+            sections.append({
+                "id": section.get("id") or "",
+                "title": section.get("title") or "",
+                "fields": fields,
+            })
+    return sections
+
+
 def serialize_form_summary(f: Form) -> dict:
     return {"id": f.id, "name": f.name, "form_type": f.form_type, "project_id": f.project_id}
 

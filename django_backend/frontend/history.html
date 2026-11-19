@@ -4,29 +4,82 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Historique — Clinique</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Plus aucune police chargee depuis Google : Barlow est hebergee dans
+     fonts/ et declaree dans style.css. L'application doit fonctionner
+     sans internet, typographie comprise. -->
 <link rel="stylesheet" href="/style.css">
 <style>
   h1 { font-size: 1.35rem; margin: 4px 0 4px 0; }
-  h2.section-title { font-size: 1.05rem; margin: 24px 0 12px 0; }
-  .submission-entry { margin-bottom: 14px; }
-  .submission-entry .header { font-size: 0.9rem; margin-bottom: 10px; display: flex; justify-content: space-between; }
-  .submission-entry .header .date { color: var(--ink-faint); font-weight: normal; }
-  .submission-entry table { width: 100%; border-collapse: collapse; }
-  .submission-entry td { padding: 5px 0; font-size: 0.88rem; }
-  .submission-entry td.label { color: var(--ink-muted); width: 55%; font-family: var(--font-mono); font-size: 0.82rem; }
+  h2.section-title {
+    font-size: 1.15rem; margin: var(--space-6) 0 var(--space-3) 0;
+    display: flex; align-items: center; gap: var(--space-2);
+  }
+  h2.section-title .icon-slot { color: var(--ink-faint); display: flex; }
+  /* --- Une soumission relue --------------------------------------------
+     Le nom du formulaire et sa date forment l'en-tete ; en dessous, les
+     reponses sont regroupees par section du formulaire, libelle a gauche et
+     valeur a droite. Le libelle n'est volontairement PAS en largeur fixe de
+     55 % : une question clinique fait souvent une phrase, la valeur rarement
+     plus de trois mots — l'ancien partage laissait un trou au milieu de la
+     carte et eloignait la valeur de sa question. */
+  .submission-entry .submission-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: var(--space-2);
+    padding-bottom: var(--space-3); border-bottom: 1px solid var(--filet);
+  }
+  .submission-entry .submission-title { font-size: 1.15rem; font-weight: 600; margin: 0; }
+  .submission-entry .submission-date { font-size: 0.85rem; color: var(--ink-faint); }
+  .resp-group { margin-top: var(--space-5); }
+  .resp-group-title {
+    font-size: 0.95rem; font-weight: 600; color: var(--ink-muted);
+    margin: 0 0 var(--space-2) 0;
+  }
+  .resp-list { margin: 0; }
+  .resp-row {
+    display: grid; grid-template-columns: minmax(0, 20rem) 1fr; gap: var(--space-4);
+    padding: var(--space-2) 0; border-bottom: 1px solid var(--filet);
+  }
+  .resp-row:last-child { border-bottom: none; }
+  .resp-row dt { margin: 0; font-size: 0.85rem; color: var(--ink-muted); }
+  .resp-row dd { margin: 0; font-size: 0.9375rem; color: var(--ink); overflow-wrap: anywhere; }
+  /* Une valeur calculee par le formulaire n'a pas ete mesuree par l'agent :
+     sur un dossier medical, la distinction compte. */
+  .resp-calc-tag {
+    display: inline-block; margin-left: var(--space-2); padding: 1px var(--space-2);
+    border-radius: 100px; background: var(--secondary-soft); color: var(--secondary-dark);
+    font-size: 0.75rem; font-weight: 600;
+  }
+  /* Les champs laisses vides restent consultables (un champ non renseigne est
+     une information en soi) mais replies, sinon un formulaire de 60 questions
+     noie les 10 reponses qui comptent. */
+  .resp-unfilled { margin-top: var(--space-4); font-size: 0.85rem; color: var(--ink-faint); }
+  .resp-unfilled summary { cursor: pointer; }
+  .resp-unfilled p { margin: var(--space-2) 0 0 0; }
+  @media (max-width: 640px) {
+    .resp-row { grid-template-columns: 1fr; gap: var(--space-1); padding: var(--space-3) 0; }
+  }
   .badge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; margin-left: 8px; }
   .badge-active { background: var(--sev-low-bg, #DCFCE7); color: var(--sev-low-fg, #15803D); }
   .badge-closed { background: var(--surface-muted); color: var(--ink-muted); }
   .badge-lost { background: #F3F4F6; color: #374151; }
+  /* Ligne de dossier de suivi. Toute la ligne est le lien : avant, le numero
+     de dossier etait un lien souligne ET un bouton « Ouvrir » menait au meme
+     endroit — deux cibles pour une seule destination, et un soulignement bleu
+     au milieu d'une liste de donnees. Ici le numero se lit comme une donnee,
+     et c'est le survol de la ligne qui dit qu'on peut l'ouvrir. */
   .case-list-item {
-    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
-    padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: var(--space-2); min-height: var(--cible-tactile);
+    text-decoration: none; color: inherit;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
   }
-  .case-list-item .left { font-size: 0.9rem; }
-  .case-list-item .meta { color: var(--ink-muted); font-size: 0.82rem; margin-top: 2px; }
+  .case-list-item:hover { background: var(--surface-muted); border-color: var(--border-strong); }
+  .case-list-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .case-list-item .case-number { font-size: 0.9375rem; font-weight: 600; color: var(--ink); }
+  .case-list-item .meta { display: block; color: var(--ink-muted); font-size: 0.85rem; margin-top: 2px; }
+  .case-list-item .chevron { color: var(--ink-faint); display: flex; flex: 0 0 auto; }
   .error-msg { background: #FEF2F2; border: 1px solid #FCA5A5; color: #B91C1C; padding: 12px 16px; border-radius: var(--radius-md); font-size: 0.9rem; }
 
   /* --- Fenêtre "Imprimer" --- */
@@ -52,17 +105,81 @@
        apparaître une seconde page vide après le vrai contenu. On neutralise
        ça uniquement pour l'impression. */
     html, body { height: auto !important; margin: 0 !important; }
-    @page { margin: 12mm; }
+    @page { margin: 14mm 12mm; }
     .app-shell { display: none !important; }
-    #print-content { display: block !important; font-family: Arial, sans-serif; color: #000; }
+    /* Le papier se mesure en points, pas en rem : un rem suit la taille de
+       police du navigateur, qui n'a plus aucun sens une fois imprimé. */
+    #print-content {
+      display: block !important; font-family: Arial, Helvetica, sans-serif;
+      color: #000; font-size: 10pt; line-height: 1.45;
+      orphans: 3; widows: 3;
+    }
     #print-content > *:last-child { margin-bottom: 0 !important; }
-    #print-content h1 { font-size: 1.3rem; margin-bottom: 2px; }
-    #print-content h2 { font-size: 1.05rem; margin: 20px 0 8px 0; border-bottom: 1px solid #999; padding-bottom: 4px; }
-    #print-content table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-    #print-content td { padding: 4px 6px; font-size: 0.85rem; border-bottom: 1px solid #ddd; vertical-align: top; }
-    #print-content td.label { width: 35%; color: #555; }
-    #print-content .print-entry { margin-bottom: 14px; page-break-inside: avoid; }
-    #print-content .entry-header { font-weight: bold; font-size: 0.9rem; margin-bottom: 4px; }
+
+    #print-content .print-doc-head { border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin-bottom: 14pt; }
+    #print-content h1 { font-size: 16pt; margin: 0 0 2pt 0; }
+    #print-content .doc-meta { font-size: 9.5pt; color: #333; margin: 0; }
+
+    #print-content h2 { font-size: 12pt; margin: 16pt 0 6pt 0; border-bottom: 0.5pt solid #999; padding-bottom: 3pt; }
+    /* En-tete de fiche. Porte par un <thead> : le navigateur le repete en haut
+       de chaque page que la fiche deborde, donc aucune feuille detachee ne se
+       retrouve sans le nom du patient. */
+    #print-content .print-fiche thead th {
+      text-align: left; padding: 0 0 4pt 0; border-bottom: 1pt solid #666;
+    }
+    #print-content .fiche-title { display: block; font-size: 11pt; font-weight: bold; }
+    #print-content .fiche-meta { display: block; font-size: 9pt; font-weight: normal; color: #444; }
+    /* Titre de section : une ligne pleine largeur dans la meme table, pour ne
+       pas avoir a couper la fiche en plusieurs tables (ce qui ferait perdre la
+       repetition de l'en-tete). */
+    /* Titre de section : un filet fin sous le libelle au lieu du seul gras —
+       l'oeil retrouve la structure du formulaire en diagonale, sans avoir a
+       lire. */
+    #print-content .print-group-row td {
+      font-weight: bold; color: #222; border-bottom: 0.5pt solid #888;
+      padding: 8pt 0 2pt 0; letter-spacing: 0.02em;
+    }
+
+    /* Identite du patient sur deux paires libelle/valeur par ligne. */
+    /* « Date de naissance » est le plus long des six libelles : la colonne est
+       calee dessus, sinon lui seul se coupe en deux lignes. */
+    #print-content .print-identite td.label { width: 20%; }
+    #print-content .print-identite td { width: 30%; }
+
+    /* Pied de document : il doit rester avec la fin du contenu, jamais seul
+       sur une derniere page presque vide. */
+    #print-content .print-doc-foot {
+      margin-top: 14pt; padding-top: 6pt; border-top: 1pt solid #000;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    #print-content .doc-mention { font-size: 8.5pt; color: #444; margin: 0 0 10pt 0; }
+    #print-content .signature-ligne {
+      display: flex; justify-content: space-between; gap: 12pt;
+      font-size: 9pt; color: #000;
+    }
+    /* Un titre ne doit jamais rester seul en bas de page, separe de ce qu'il
+       annonce : c'est ce qui laissait « Fiches de Suivi » isole en pied de la
+       page 1 pendant que son contenu partait page 2. */
+    #print-content h1, #print-content h2,
+    #print-content .print-fiche thead,
+    #print-content .print-group-row { break-after: avoid; page-break-after: avoid; }
+
+    #print-content table { width: 100%; border-collapse: collapse; margin: 0 0 4pt 0; }
+    #print-content td { padding: 2.5pt 4pt; border-bottom: 0.5pt solid #D5D5D5; vertical-align: top; }
+    /* 45 % : les questions cliniques font souvent une phrase, les reponses
+       rarement plus de trois mots. A 35 % la question se coupait en trois
+       lignes pendant que la moitie droite de la feuille restait vide. */
+    #print-content td.label { width: 45%; color: #444; }
+    #print-content .print-calc { color: #666; font-weight: normal; }
+    #print-content .print-attachment, #print-content .print-unfilled { color: #666; font-style: italic; }
+    #print-content .print-unfilled { font-size: 9pt; margin: 2pt 0 0 0; }
+
+    /* Une fiche longue DOIT pouvoir se poursuivre page suivante : lui interdire
+       de se couper (page-break-inside: avoid) laissait une demi-page blanche
+       des qu'elle ne tenait plus dans la place restante. On protege seulement
+       chaque ligne, pour qu'une question ne soit jamais separee de sa reponse. */
+    #print-content .print-entry { margin-bottom: 12pt; break-inside: auto; }
+    #print-content tr { break-inside: avoid; page-break-inside: avoid; }
   }
 </style>
   <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
@@ -79,16 +196,16 @@
 
     <div class="breadcrumb"><a href="/">Tous les projets</a> / <a id="breadcrumb-project" href="/">…</a> / <span id="breadcrumb-module"></span>Historique</div>
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-      <h1 style="margin:0;">📖 Historique du patient</h1>
-      <button type="button" class="btn btn-ghost btn-sm" id="print-btn">🖨️ Imprimer</button>
+      <h1 style="margin:0;">Historique du patient</h1>
+      <button type="button" class="btn btn-ghost btn-sm" id="print-btn"><span class="icon-slot" data-icon="printer"></span>Imprimer</button>
     </div>
     <p id="patient-name" style="color:var(--ink-muted);"></p>
     <div id="patient-actions" style="margin-bottom:10px;"></div>
 
-    <h2 class="section-title">📋 Dossiers de suivi</h2>
+    <h2 class="section-title"><span class="icon-slot" data-icon="folder-open"></span>Dossiers de suivi</h2>
     <div id="case-list-box"></div>
 
-    <h2 class="section-title">📝 Toutes les soumissions (Enquête et Suivi)</h2>
+    <h2 class="section-title"><span class="icon-slot" data-icon="clipboard-list"></span>Toutes les soumissions (Enquête et Suivi)</h2>
     <div id="submissions-container"></div>
     <div class="empty-state hidden" id="empty-message"><span class="empty-icon">📖</span>Aucune consultation enregistrée pour ce patient.</div>
 
@@ -131,6 +248,10 @@ const cameFromFormId = params.get('form_id');
 // (sinon il faudrait tout re-télécharger au moment de l'impression).
 let currentPatientData = null;
 let currentSubmissionsData = [];
+// Retenu au chargement : le document imprime doit dire QUI l'a sorti. Sur un
+// dossier medical qui circule en papier, c'est ce qui permet de remonter a
+// l'origine d'une copie.
+let currentUser = null;
 
 function escapeHtmlHist(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -144,6 +265,11 @@ function escapeHtmlHist(str) {
 
   const user = await initAppShell(null);
   if (!user) return;
+  currentUser = user;
+  // Les <span data-icon> ecrits en dur dans la page ne se remplissent pas tout
+  // seuls : chaque page appelle renderIconSlots une fois icons.js charge par
+  // initAppShell (meme convention que survey.html, index.html, follow_up.html).
+  renderIconSlots(document);
 
   const patientRes = await fetch(`/api/patients/${patientId}`, { credentials: 'same-origin' });
   if (!patientRes.ok) {
@@ -205,34 +331,157 @@ function escapeHtmlHist(str) {
     const timePart = sub.created_at ? new Date(sub.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
     const dateStr = timePart ? `${datePart} à ${timePart}` : datePart;
 
-    let rows = '';
-    const fieldTypes = sub.field_types || {};
-    for (const [key, value] of Object.entries(sub.responses)) {
-      const colType = fieldTypes[key];
-      let display;
-      if (value === null || value === undefined || value === '') {
-        display = '—';
-      } else if (colType === 'signature') {
-        display = `<img src="/api/media/${value}" alt="Signature" style="max-height:70px;background:#fff;border:1px solid var(--border);border-radius:6px;">`;
-      } else if (['image', 'audio', 'video', 'file'].includes(colType)) {
-        const url = `/api/media/${value}`;
-        if (colType === 'image') display = `<a href="${url}" target="_blank"><img src="${url}" alt="Photo" style="max-width:70px;max-height:70px;border-radius:6px;vertical-align:middle;"></a>`;
-        else if (colType === 'audio') display = `<audio controls src="${url}" style="max-width:220px;height:32px;"></audio>`;
-        else if (colType === 'video') display = `<a href="${url}" target="_blank">${window.icon ? icon('video') : ''} Voir la vidéo</a>`;
-        else display = `<a href="${url}" target="_blank">${window.icon ? icon('paperclip') : ''} Voir le fichier</a>`;
-      } else {
-        display = escapeHtmlHist(value);
-      }
-      rows += `<tr><td class="label">${escapeHtmlHist(key)}</td><td>${display}</td></tr>`;
-    }
-
     div.innerHTML = `
-      <div class="header"><strong>${escapeHtmlHist(sub.form_name)}</strong><span class="date">${dateStr}</span></div>
-      <table>${rows}</table>
+      <div class="submission-head">
+        <h3 class="submission-title">${escapeHtmlHist(sub.form_name)}</h3>
+        <span class="submission-date">${dateStr}</span>
+      </div>
+      ${renderSubmissionBody(sub)}
     `;
     container.appendChild(div);
   });
 })();
+
+/* ── Relire une soumission ───────────────────────────────────────────────
+   Une soumission est stockée en JSON brut : { "site": "cs_abobo_sud",
+   "perimetre_brachial_mm": 128, ... }. Affichée telle quelle, elle donne une
+   liste d'identifiants techniques et de codes, dans l'ordre des clés JSON —
+   c'est-à-dire ni le texte lu par l'agent, ni l'ordre dans lequel il a rempli
+   la fiche. Le serveur renvoie `field_schema` (sections, libellés, libellés
+   des options) : tout ce qui suit s'en sert pour réafficher la fiche telle
+   qu'elle a été saisie. */
+
+function submissionSchema(sub) {
+  if (Array.isArray(sub.field_schema) && sub.field_schema.length) return sub.field_schema;
+  // Repli : réponse d'une version antérieure de l'API (page ouverte depuis le
+  // cache hors-ligne, par exemple). On retombe sur les clés brutes plutôt que
+  // de n'afficher rien du tout.
+  const types = sub.field_types || {};
+  return [{
+    id: '', title: '',
+    fields: Object.keys(sub.responses || {}).map(k => ({ id: k, label: k, type: types[k] })),
+  }];
+}
+
+function isEmptyAnswer(v) {
+  return v === null || v === undefined || v === ''
+      || (Array.isArray(v) && v.length === 0);
+}
+
+function optionLabel(field, value) {
+  const opts = field.options;
+  const key = String(value);
+  return (opts && Object.prototype.hasOwnProperty.call(opts, key)) ? opts[key] : key;
+}
+
+// Une date est stockée en "AAAA-MM-JJ" : on la découpe à la main plutôt que de
+// passer par new Date(), qui l'interprète en UTC et affiche la veille pour
+// tout fuseau à l'ouest de Greenwich.
+function frenchDate(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value);
+}
+
+// `pourPapier` ne change que le sort des fichiers joints : une photo ou un
+// enregistrement audio n'a aucun sens sur une feuille, la signature si — c'est
+// souvent la raison meme d'imprimer la fiche (preuve de consentement). Tout le
+// reste (libelles d'options, oui/non, dates, choix multiples) doit rester
+// IDENTIQUE a l'ecran : une fiche imprimee et la meme fiche relue a l'ecran ne
+// doivent jamais se lire differemment.
+function answerHtml(value, field, pourPapier) {
+  const type = field.type;
+
+  if (type === 'signature') {
+    return pourPapier
+      ? `<img src="/api/media/${value}" alt="Signature" style="max-height:70px;">`
+      : `<img src="/api/media/${value}" alt="Signature" style="max-height:70px;background:#fff;border:1px solid var(--border);border-radius:6px;">`;
+  }
+  if (['image', 'audio', 'video', 'file'].includes(type)) {
+    if (pourPapier) return '<span class="print-attachment">(fichier joint — non imprimé)</span>';
+    const url = `/api/media/${value}`;
+    if (type === 'image') return `<a href="${url}" target="_blank"><img src="${url}" alt="Photo" style="max-width:70px;max-height:70px;border-radius:6px;vertical-align:middle;"></a>`;
+    if (type === 'audio') return `<audio controls src="${url}" style="max-width:220px;height:32px;"></audio>`;
+    if (type === 'video') return `<a href="${url}" target="_blank">${window.icon ? icon('video') : ''} Voir la vidéo</a>`;
+    return `<a href="${url}" target="_blank">${window.icon ? icon('paperclip') : ''} Voir le fichier</a>`;
+  }
+  if (type === 'boolean') {
+    return (value === true || String(value).toLowerCase() === 'true') ? 'Oui' : 'Non';
+  }
+  if (Array.isArray(value)) {
+    return value.map(v => escapeHtmlHist(optionLabel(field, v))).join(', ');
+  }
+  if (type === 'date') return escapeHtmlHist(frenchDate(value));
+
+  // "oui"/"non" est le vocabulaire oui/non de toute l'application (liste de
+  // choix oui_non). Un champ CALCULÉ renvoie ces mots en minuscules puisqu'ils
+  // sortent d'une formule, pas d'une liste d'options : sans ça, une même fiche
+  // montre « Oui » pour une question posée et « non » juste en dessous pour la
+  // valeur qui en est déduite.
+  if (!field.options && (value === 'oui' || value === 'non')) {
+    return value === 'oui' ? 'Oui' : 'Non';
+  }
+  return escapeHtmlHist(optionLabel(field, value));
+}
+
+function renderSubmissionBody(sub) {
+  const responses = sub.responses || {};
+  const schema = submissionSchema(sub);
+  const known = new Set();
+
+  let html = '';
+  const unfilled = [];
+
+  schema.forEach(section => {
+    let rows = '';
+    section.fields.forEach(field => {
+      known.add(field.id);
+      const value = responses[field.id];
+      if (isEmptyAnswer(value)) { unfilled.push(field.label); return; }
+      const tag = field.type === 'calculated'
+        ? '<span class="resp-calc-tag">calculé</span>' : '';
+      rows += `<div class="resp-row">
+                 <dt>${escapeHtmlHist(field.label)}${tag}</dt>
+                 <dd>${answerHtml(value, field)}</dd>
+               </div>`;
+    });
+    if (!rows) return;
+    const title = section.title
+      ? `<h4 class="resp-group-title">${escapeHtmlHist(section.title)}</h4>` : '';
+    html += `<section class="resp-group">${title}<dl class="resp-list">${rows}</dl></section>`;
+  });
+
+  // Réponses qui ne correspondent à aucun champ du formulaire actuel : il a été
+  // modifié après cette saisie. On ne les cache jamais — une donnée médicale
+  // enregistrée doit rester lisible, même devenue orpheline.
+  let extras = '';
+  Object.keys(responses).forEach(key => {
+    if (known.has(key)) return;
+    const value = responses[key];
+    if (isEmptyAnswer(value)) return;
+    extras += `<div class="resp-row">
+                 <dt>${escapeHtmlHist(key)}</dt>
+                 <dd>${answerHtml(value, { id: key, label: key, type: (sub.field_types || {})[key] })}</dd>
+               </div>`;
+  });
+  if (extras) {
+    html += `<section class="resp-group">
+               <h4 class="resp-group-title">Réponses d'une version précédente du formulaire</h4>
+               <dl class="resp-list">${extras}</dl>
+             </section>`;
+  }
+
+  if (!html) {
+    html = '<p class="resp-unfilled">Cette fiche a été enregistrée sans aucune réponse.</p>';
+  }
+  if (unfilled.length) {
+    const pluriel = unfilled.length > 1 ? 's' : '';
+    html += `<details class="resp-unfilled">
+               <summary>${unfilled.length} champ${pluriel} non renseigné${pluriel}</summary>
+               <p>${unfilled.map(escapeHtmlHist).join(' · ')}</p>
+             </details>`;
+  }
+  return html;
+}
 
 function formatDate(d) {
   if (!d) return '—';
@@ -256,32 +505,79 @@ function computeAgeHist(dob) {
   return `${years} ans`;
 }
 
-function renderPrintResponsesTable(responses, fieldTypes) {
-  let rows = '';
-  const types = fieldTypes || {};
-  for (const [key, value] of Object.entries(responses || {})) {
-    const colType = types[key];
-    let display;
-    if (value === null || value === undefined || value === '') display = '—';
-    // La signature est une exception volontaire : contrairement aux autres
-    // fichiers joints, c'est souvent la raison même d'imprimer le document
-    // (preuve de consentement/présence) — elle s'affiche donc en clair.
-    else if (colType === 'signature') display = `<img src="/api/media/${value}" alt="Signature" style="max-height:70px;">`;
-    else if (['image', 'audio', 'video', 'file'].includes(colType)) display = '(fichier joint — non imprimé)';
-    else display = escapeHtmlHist(String(value));
-    rows += `<tr><td class="label">${escapeHtmlHist(key)}</td><td>${display}</td></tr>`;
+// Le papier suit exactement la meme lecture du formulaire que l'ecran
+// (sections, ordre de saisie, libelles, libelles d'options) : c'est le meme
+// `field_schema` renvoye par le serveur qui sert aux deux.
+// Une fiche = UNE seule table, titres de section compris. C'est volontaire :
+// le <thead> qui porte le nom du patient est alors repete par le navigateur en
+// haut de chaque page que la fiche deborde. Une impression finit en feuilles
+// separees sur un bureau, et une feuille sans nom de patient dans un dossier
+// medical est au mieux inutilisable, au pire dangereuse.
+function renderPrintSubmission(sub, ident) {
+  const responses = sub.responses || {};
+  const schema = submissionSchema(sub);
+  const known = new Set();
+  const unfilled = [];
+  let corps = '';
+
+  schema.forEach(section => {
+    let rows = '';
+    section.fields.forEach(field => {
+      known.add(field.id);
+      const value = responses[field.id];
+      if (isEmptyAnswer(value)) { unfilled.push(field.label); return; }
+      const calc = field.type === 'calculated' ? ' <span class="print-calc">(calculé)</span>' : '';
+      rows += `<tr><td class="label">${escapeHtmlHist(field.label)}${calc}</td><td>${answerHtml(value, field, true)}</td></tr>`;
+    });
+    if (!rows) return;
+    if (section.title) {
+      corps += `<tr class="print-group-row"><td colspan="2">${escapeHtmlHist(section.title)}</td></tr>`;
+    }
+    corps += rows;
+  });
+
+  // Reponses sans champ correspondant : le formulaire a ete modifie apres
+  // cette saisie. Jamais masquees — une donnee medicale enregistree doit
+  // rester lisible sur le document imprime, meme devenue orpheline.
+  let extras = '';
+  Object.keys(responses).forEach(key => {
+    if (known.has(key) || isEmptyAnswer(responses[key])) return;
+    const field = { id: key, label: key, type: (sub.field_types || {})[key] };
+    extras += `<tr><td class="label">${escapeHtmlHist(key)}</td><td>${answerHtml(responses[key], field, true)}</td></tr>`;
+  });
+  if (extras) {
+    corps += `<tr class="print-group-row"><td colspan="2">Réponses d'une version précédente du formulaire</td></tr>${extras}`;
   }
-  return `<table>${rows}</table>`;
+
+  if (!corps) {
+    corps = '<tr><td colspan="2" class="print-unfilled">Fiche enregistrée sans aucune réponse.</td></tr>';
+  }
+
+  let html = `
+    <table class="print-fiche">
+      <thead>
+        <tr><th colspan="2">
+          <span class="fiche-title">${escapeHtmlHist(sub.form_name)}</span>
+          <span class="fiche-meta">${ident}${ident ? ' · ' : ''}Fiche du ${frenchDate(sub.collected_at)}</span>
+        </th></tr>
+      </thead>
+      <tbody>${corps}</tbody>
+    </table>`;
+
+  // Sur papier on ne peut rien replier : les champs vides tiennent en une
+  // ligne de bas de fiche au lieu d'une ligne de tableau chacun.
+  if (unfilled.length) {
+    html += `<p class="print-unfilled">Non renseigné : ${unfilled.map(escapeHtmlHist).join(' · ')}.</p>`;
+  }
+  return html;
 }
 
 function renderPrintEntries(subs) {
-  if (subs.length === 0) return '<p>Aucune fiche pour cette sélection.</p>';
-  return subs.map(s => `
-    <div class="print-entry">
-      <div class="entry-header">${escapeHtmlHist(s.form_name)} — ${new Date(s.collected_at).toLocaleDateString('fr-FR')}</div>
-      ${renderPrintResponsesTable(s.responses, s.field_types)}
-    </div>
-  `).join('');
+  if (subs.length === 0) return '<p class="print-unfilled">Aucune fiche pour cette sélection.</p>';
+  const p = currentPatientData || {};
+  const ident = [`${p.last_name || ''} ${p.first_name || ''}`.trim(), p.anonymous_code]
+    .filter(Boolean).map(escapeHtmlHist).join(' · ');
+  return subs.map(s => `<section class="print-entry">${renderPrintSubmission(s, ident)}</section>`).join('');
 }
 
 function buildPrintHtml(mode, dateStart, dateEnd) {
@@ -292,18 +588,39 @@ function buildPrintHtml(mode, dateStart, dateEnd) {
   const includeSurvey = mode === 'patient_survey';
   const includeFollowup = mode === 'patient_followup' || mode === 'followup_only';
 
-  let html = `<h1>Historique patient</h1><p>Imprimé le ${new Date().toLocaleDateString('fr-FR')}</p>`;
+  // Le nom du projet est deja affiche dans le fil d'Ariane : on le relit la
+  // plutot que de refaire un appel reseau au moment d'imprimer (l'agent peut
+  // etre hors-ligne a cet instant).
+  const projectName = (document.getElementById('breadcrumb-project').textContent || '').trim();
+  const identite = [`${p.last_name || ''} ${p.first_name || ''}`.trim(), p.anonymous_code]
+    .filter(Boolean).map(escapeHtmlHist).join(' · ');
+
+  let html = `
+    <header class="print-doc-head">
+      <h1>Historique patient</h1>
+      <p class="doc-meta">${identite}</p>
+      <p class="doc-meta">${projectName ? escapeHtmlHist(projectName) + ' · ' : ''}Imprimé le ${new Date().toLocaleDateString('fr-FR')}</p>
+    </header>`;
 
   if (includePatientInfo) {
+    // Deux colonnes plutôt que six lignes : l'identité d'un patient tient en
+    // trois lignes, et ces 2 cm gagnés en haut de page profitent aux fiches,
+    // qui sont ce qu'on vient vraiment lire.
     html += `
       <h2>Informations patient</h2>
-      <table>
-        <tr><td class="label">Nom</td><td>${escapeHtmlHist(p.last_name)}</td></tr>
-        <tr><td class="label">Prénom</td><td>${escapeHtmlHist(p.first_name)}</td></tr>
-        <tr><td class="label">Code anonyme</td><td>${p.anonymous_code || '—'}</td></tr>
-        <tr><td class="label">Sexe</td><td>${p.sex || '—'}</td></tr>
-        <tr><td class="label">Date de naissance</td><td>${formatDate(p.date_of_birth)}${age !== null ? ` (Âge : ${age})` : ''}</td></tr>
-        <tr><td class="label">Téléphone</td><td>${escapeHtmlHist(p.phone || '—')}</td></tr>
+      <table class="print-identite">
+        <tr>
+          <td class="label">Nom</td><td>${escapeHtmlHist(p.last_name)}</td>
+          <td class="label">Code anonyme</td><td>${escapeHtmlHist(p.anonymous_code || '—')}</td>
+        </tr>
+        <tr>
+          <td class="label">Prénom</td><td>${escapeHtmlHist(p.first_name)}</td>
+          <td class="label">Sexe</td><td>${escapeHtmlHist(p.sex || '—')}</td>
+        </tr>
+        <tr>
+          <td class="label">Date de naissance</td><td>${formatDate(p.date_of_birth)}${age !== null ? ` (${age})` : ''}</td>
+          <td class="label">Téléphone</td><td>${escapeHtmlHist(p.phone || '—')}</td>
+        </tr>
       </table>`;
   }
 
@@ -318,6 +635,20 @@ function buildPrintHtml(mode, dateStart, dateEnd) {
     const periodLabel = (dateStart || dateEnd) ? ` (du ${dateStart ? formatDate(dateStart) : '…'} au ${dateEnd ? formatDate(dateEnd) : '…'})` : '';
     html += `<h2>Fiches de Suivi${periodLabel}</h2>${renderPrintEntries(followupSubs)}`;
   }
+
+  // Pied de document. Une fiche de dossier medical imprimee sort du cadre de
+  // l'application : elle doit porter sa mention de confidentialite, dire qui
+  // l'a editee, et laisser une place pour la signature de l'agent — sans quoi
+  // elle n'a aucune valeur dans un classeur.
+  const agent = currentUser ? (currentUser.full_name || currentUser.email) : '';
+  html += `
+    <footer class="print-doc-foot">
+      <p class="doc-mention">Document confidentiel — données de santé. À conserver dans le dossier du patient.</p>
+      <div class="signature-ligne">
+        <span>Édité par ${escapeHtmlHist(agent)}</span>
+        <span>Nom et signature de l'agent : ______________________________</span>
+      </div>
+    </footer>`;
 
   return html;
 }
@@ -361,13 +692,13 @@ async function loadCaseTransferBox(patient) {
     html += '<p style="color:var(--ink-muted); font-size:0.9rem;">Aucun dossier de suivi pour ce patient pour l\'instant.</p>';
   } else {
     for (const c of cases) {
-      html += `<div class="case-list-item">
-        <div class="left">
-          <a href="/case_detail.html?case_id=${c.id}"><strong>${c.case_number}</strong></a>${statusBadge(c.status)}
-          <div class="meta">Inscrit le ${formatDate(c.enrolled_at)}${c.closed_at ? ' · Clôturé le ' + formatDate(c.closed_at) + (c.closed_reason ? ' (' + escapeHtmlHist(c.closed_reason) + ')' : '') : ''}</div>
-        </div>
-        <a class="btn btn-ghost btn-sm" href="/case_detail.html?case_id=${c.id}">Ouvrir →</a>
-      </div>`;
+      html += `<a class="case-list-item" href="/case_detail.html?case_id=${c.id}">
+        <span class="left">
+          <span class="case-number">${c.case_number}</span>${statusBadge(c.status)}
+          <span class="meta">Inscrit le ${formatDate(c.enrolled_at)}${c.closed_at ? ' · Clôturé le ' + formatDate(c.closed_at) + (c.closed_reason ? ' (' + escapeHtmlHist(c.closed_reason) + ')' : '') : ''}</span>
+        </span>
+        <span class="chevron">${window.icon ? icon('chevron-right', { size: '18px' }) : ''}</span>
+      </a>`;
     }
   }
   html += `
@@ -375,9 +706,10 @@ async function loadCaseTransferBox(patient) {
       <label style="display:block; font-size:0.82rem; color:var(--ink-muted); margin-bottom:4px;">Date réelle d'inscription (optionnel, laisser vide = aujourd'hui)</label>
       <input type="date" id="new-case-enrolled-date" style="max-width:220px;">
     </div>
-    <button class="btn btn-secondary btn-sm" id="btn-transfer-to-followup" style="margin-top:10px;">📋 Créer un nouveau dossier de suivi</button>
+    <button class="btn btn-secondary btn-sm" id="btn-transfer-to-followup" style="margin-top:10px;"><span class="icon-slot" data-icon="circle-plus"></span>Créer un nouveau dossier de suivi</button>
     <p id="case-create-error" class="error-msg hidden" style="margin-top:10px;"></p>`;
   box.innerHTML = html;
+  renderIconSlots(box);   // contenu injecte apres le premier passage
 
   document.getElementById('btn-transfer-to-followup').addEventListener('click', () => createCase(patient, false));
 }
@@ -391,7 +723,8 @@ async function renderPatientActions(patient) {
   const cases = casesRes.ok ? await casesRes.json() : [];
   const subs = subsRes.ok ? (await subsRes.json()) : [];
   if (cases.length === 0 && subs.length === 0) {
-    box.innerHTML = `<button class="btn btn-ghost btn-sm" id="btn-delete-patient" style="color:#B91C1C;">🗑 Supprimer ce patient (aucune donnée rattachée)</button>`;
+    box.innerHTML = `<button class="btn btn-ghost btn-sm" id="btn-delete-patient" style="color:#B91C1C;"><span class="icon-slot" data-icon="trash-2"></span>Supprimer ce patient (aucune donnée rattachée)</button>`;
+    renderIconSlots(box);
     document.getElementById('btn-delete-patient').addEventListener('click', async () => {
       if (!confirm('Supprimer définitivement cette fiche patient ? Cette action est irréversible.')) return;
       const res = await fetch(`/api/patients/${patientId}`, { method: 'DELETE', credentials: 'same-origin' });

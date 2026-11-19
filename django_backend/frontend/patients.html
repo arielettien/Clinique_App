@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Clinique — Patients</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Plus aucune police chargee depuis Google : Barlow est hebergee dans
+     fonts/ et declaree dans style.css. L'application doit fonctionner
+     sans internet, typographie comprise. -->
 <link rel="stylesheet" href="/style.css">
 <style>
   .page-header { margin-bottom: 20px; }
@@ -49,13 +49,61 @@
   #print-content { display: none; }
   @media print {
     html, body { height: auto !important; margin: 0 !important; }
-    @page { margin: 12mm; }
+    @page { margin: 14mm 12mm; }
     .app-shell { display: none !important; }
-    #print-content { display: block !important; font-family: Arial, sans-serif; color: #000; }
-    #print-content h1 { font-size: 1.3rem; margin-bottom: 2px; }
-    #print-content p { font-size: 0.85rem; }
-    #print-content table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    #print-content th, #print-content td { padding: 4px 6px; font-size: 0.8rem; border-bottom: 1px solid #ddd; text-align: left; }
+    /* Le papier se mesure en points : un rem suit la taille de police du
+       navigateur, qui n'a plus aucun sens une fois imprimé. */
+    #print-content {
+      display: block !important; font-family: Arial, Helvetica, sans-serif;
+      color: #000; font-size: 10pt; line-height: 1.4;
+    }
+
+    #print-content .print-doc-head {
+      border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin-bottom: 10pt;
+    }
+    #print-content h1 { font-size: 16pt; margin: 0 0 2pt 0; }
+    #print-content .doc-meta { font-size: 9.5pt; color: #333; margin: 0; }
+
+    #print-content table { width: 100%; border-collapse: collapse; }
+    /* L'en-tête de colonnes est dans un <thead> : les navigateurs le répètent
+       en haut de chaque page. Sur une liste de 200 patients, sans ça les pages
+       2 et suivantes sont des colonnes de chiffres sans titre. */
+    #print-content thead th {
+      font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.04em;
+      text-align: left; padding: 0 4pt 3pt 4pt; border-bottom: 1pt solid #000;
+    }
+    #print-content tbody td {
+      padding: 5pt 4pt; font-size: 9.5pt;
+      border-bottom: 0.5pt solid #D5D5D5; vertical-align: top;
+    }
+    /* Un filet plus marqué toutes les 5 lignes : sur une ligne large, l'œil
+       suit le nom jusqu'à l'âge sans sauter de ligne. Un aplat gris ferait le
+       même travail mais la plupart des agents impriment sans les fonds. */
+    #print-content tbody tr:nth-child(5n) td { border-bottom-color: #8A8A8A; }
+    #print-content tr { break-inside: avoid; page-break-inside: avoid; }
+
+    /* Largeurs fixes : sans elles le navigateur serre tout à gauche et laisse
+       un tiers de la feuille vide à droite. La dernière colonne est laissée
+       VIDE à dessein — une liste d'enrôlement part sur le terrain et revient
+       annotée (présent, absent, rendez-vous donné). Sans cette colonne,
+       l'agent écrit dans la marge, et la place gagnée ne sert à personne. */
+    #print-content table { table-layout: fixed; }
+    #print-content .col-num    { width: 5%;  text-align: right; }
+    #print-content .col-code   { width: 17%; }
+    #print-content .col-sexe   { width: 8%;  }
+    #print-content .col-age    { width: 11%; }
+    #print-content .col-statut { width: 14%; }
+    #print-content .col-obs    { border-left: 0.5pt solid #D5D5D5; }
+    #print-content tbody td { word-wrap: break-word; }
+
+    #print-content .print-doc-foot {
+      margin-top: 12pt; padding-top: 6pt; border-top: 1pt solid #000;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    #print-content .doc-mention { font-size: 8.5pt; color: #444; margin: 0 0 8pt 0; }
+    #print-content .signature-ligne {
+      display: flex; justify-content: space-between; gap: 12pt; font-size: 9pt;
+    }
   }
 </style>
   <!-- Theme « blanc et bleu ». Place APRES le <style> de la page pour que
@@ -71,7 +119,7 @@
   <main class="app-main">
 
     <div class="page-header">
-      <h1>👥 Patients enrôlés</h1>
+      <h1>Patients enrôlés</h1>
     </div>
 
     <div class="filters-row">
@@ -93,8 +141,8 @@
     <div id="patients-count-row" class="hidden" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
       <p id="patients-count-label" style="margin:0;"></p>
       <div style="display:flex; gap:8px;">
-        <button type="button" class="btn btn-ghost btn-sm" id="patients-print-btn">🖨️ Imprimer</button>
-        <button type="button" class="btn btn-ghost btn-sm" id="patients-export-btn">⬇️ Exporter (CSV)</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="patients-print-btn"><span class="icon-slot" data-icon="printer"></span>Imprimer</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="patients-export-btn"><span class="icon-slot" data-icon="download"></span>Exporter (CSV)</button>
       </div>
     </div>
     <div id="patients-table-wrap"></div>
@@ -156,6 +204,9 @@ function statusLabelPat(status) {
   return '';
 }
 
+// Retenu au chargement : la liste imprimee doit dire QUI l'a sortie. Une liste
+// nominative de patients qui circule sans origine est intracable.
+let currentUserPat = null;
 let currentProjectId = '';
 let currentFormId = '';
 let currentFormHasReferral = false;
@@ -173,6 +224,10 @@ let projectPatientsMap = new Map();
 (async () => {
   const user = await initAppShell(null);
   if (!user) return;
+  currentUserPat = user;
+  // Les <span data-icon> ecrits en dur dans la page ne se remplissent pas tout
+  // seuls : chaque page appelle renderIconSlots une fois icons.js charge.
+  renderIconSlots(document);
 
   const res = await fetch('/api/projects', { credentials: 'same-origin' });
   const projects = res.ok ? await res.json() : [];
@@ -414,15 +469,70 @@ document.getElementById('patients-print-btn').addEventListener('click', () => {
   const formName = document.getElementById('filter-form').selectedOptions[0]?.textContent || 'Tous les formulaires';
   const statusName = document.getElementById('filter-status').selectedOptions[0]?.textContent || 'Tous les statuts';
 
-  let html = `<h1>Patients enrôlés</h1>
-    <p>Projet : ${escapeHtmlPat(projectName)} — Formulaire : ${escapeHtmlPat(formName)}${currentFormHasReferral ? ` — Statut : ${escapeHtmlPat(statusName)}` : ''}</p>
-    <p>${rows.length} patient(s)${stats.sexLabel ? ` · Sexe : ${stats.sexLabel}` : ''}${stats.ageLabel ? ` · Âge ${stats.ageLabel}` : ''}${stats.statusLabel ? ` · Statut Suivi : ${stats.statusLabel}` : ''}</p>
-    <table><thead><tr><th>#</th><th>Patient</th><th>Code anonyme</th><th>Sexe</th><th>Âge</th>${currentFormHasReferral ? '<th>Statut Suivi</th>' : ''}</tr></thead><tbody>`;
+  // En-tête de document : ce qu'on imprime, sur quel périmètre, et quand. Sans
+  // la date, une liste retrouvée dans un classeur ne dit pas de quand elle
+  // date — et une liste de patients périmée est pire que pas de liste.
+  const filtres = [
+    `Projet : ${escapeHtmlPat(projectName)}`,
+    `Formulaire : ${escapeHtmlPat(formName)}`,
+  ];
+  if (currentFormHasReferral) filtres.push(`Statut : ${escapeHtmlPat(statusName)}`);
+
+  const resume = [
+    `${rows.length} patient(s)`,
+    stats.sexLabel ? `Sexe : ${stats.sexLabel}` : '',
+    stats.ageLabel ? `Âge ${stats.ageLabel}` : '',
+    stats.statusLabel ? `Statut Suivi : ${stats.statusLabel}` : '',
+  ].filter(Boolean).join(' · ');
+
+  let html = `
+    <header class="print-doc-head">
+      <h1>Patients enrôlés</h1>
+      <p class="doc-meta">${filtres.join(' · ')}</p>
+      <p class="doc-meta">${resume} · Imprimé le ${new Date().toLocaleDateString('fr-FR')}</p>
+    </header>
+    <table>
+      <thead>
+        <tr>
+          <th class="col-num">N°</th>
+          <th>Patient</th>
+          <th class="col-code">Code anonyme</th>
+          <th class="col-sexe">Sexe</th>
+          <th class="col-age">Âge</th>
+          ${currentFormHasReferral ? '<th class="col-statut">Statut Suivi</th>' : ''}
+          <th class="col-obs">Observations</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  if (rows.length === 0) {
+    html += `<tr><td colspan="${currentFormHasReferral ? 7 : 6}">Aucun patient ne correspond à cette sélection.</td></tr>`;
+  }
   rows.forEach((r, idx) => {
     const age = formatAgePat(computeAgePat(r.date_of_birth));
-    html += `<tr><td>${idx + 1}</td><td>${escapeHtmlPat(r.patient_name)}</td><td>${r.anonymous_code || '—'}</td><td>${r.sex || '—'}</td><td>${age !== null ? age : '—'}</td>${currentFormHasReferral ? `<td>${r.referral_status ? statusLabelPat(r.referral_status) : '—'}</td>` : ''}</tr>`;
+    html += `<tr>
+      <td class="col-num">${idx + 1}</td>
+      <td>${escapeHtmlPat(r.patient_name)}</td>
+      <td class="col-code">${escapeHtmlPat(r.anonymous_code || '—')}</td>
+      <td class="col-sexe">${escapeHtmlPat(r.sex || '—')}</td>
+      <td class="col-age">${age !== null ? age : '—'}</td>
+      ${currentFormHasReferral ? `<td class="col-statut">${r.referral_status ? statusLabelPat(r.referral_status) : '—'}</td>` : ''}
+      <td class="col-obs"></td>
+    </tr>`;
   });
   html += '</tbody></table>';
+
+  // Cette liste porte des noms de patients : elle ne doit jamais circuler sans
+  // sa mention de confidentialité ni sans dire qui l'a sortie.
+  const agent = currentUserPat ? (currentUserPat.full_name || currentUserPat.email) : '';
+  html += `
+    <footer class="print-doc-foot">
+      <p class="doc-mention">Document confidentiel — données de santé nominatives. Ne pas diffuser hors de l'équipe.</p>
+      <div class="signature-ligne">
+        <span>Édité par ${escapeHtmlPat(agent)}</span>
+        <span>Vérifié par : ______________________________</span>
+      </div>
+    </footer>`;
 
   document.getElementById('print-content').innerHTML = html;
   window.print();

@@ -10,6 +10,25 @@
    hors-ligne la retrouve dans le cache du Service Worker.
    font-display: swap — le texte reste lisible pendant le chargement du
    fichier plutôt que de laisser un blanc. */
+/* Barlow / Barlow Condensed — la typographie de toute l'application.
+   Hebergees localement (dossier fonts/, licence OFL), jamais depuis Google :
+   une page ouverte sans internet doit garder sa typographie.
+
+   Seuls les poids 400/500/600 existent en fichier. La declaration « 600 700 »
+   fait servir le fichier 600 a tout ce qui demande 700 : les titres rendent
+   donc de vraies lettres en demi-gras, au lieu du faux gras que le navigateur
+   fabriquerait en epaississant lui-meme les contours. */
+@font-face { font-family: 'Barlow'; font-weight: 400; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 500; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 600 700; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 500; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-condensed-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 600 700; font-style: normal; font-display: swap;
+  src: url('/fonts/barlow-condensed-latin-600-normal.woff2') format('woff2'); }
+
 @font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; font-display: swap;
   src: url('/fonts/inter-latin-400-normal.woff2') format('woff2'); }
 @font-face { font-family: 'Inter'; font-weight: 500; font-style: normal; font-display: swap;
@@ -104,8 +123,8 @@
 
   /* Une seule famille de police partout (Inter) — plus maîtrisé que deux polices mal assorties.
      --font-display conservée pour compatibilité avec le CSS existant, repointée vers Inter. */
-  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
 }
 
@@ -194,16 +213,41 @@ button, .btn { font-family: var(--font-body); }
   overflow-y: auto;
 }
 
+.app-sidebar .sidebar-tete {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-2); margin-bottom: 22px;
+}
 .app-sidebar .brand {
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--ink);
-  margin-bottom: 22px;
   display: flex;
   align-items: center;
   gap: 8px;
   text-decoration: none;
+  min-width: 0;
 }
+
+/* Bouton de repli de la barre laterale. */
+.app-sidebar .sidebar-toggle {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  background: none; border: none; border-radius: var(--radius-sm);
+  color: var(--ink-faint); cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.app-sidebar .sidebar-toggle:hover { background: var(--surface-muted); color: var(--ink); }
+.app-sidebar .sidebar-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Selecteur a trois niveaux volontaire : style_blanc_bleu.css, chargee apres
+   celle-ci, pose « .app-sidebar .brand { margin-bottom: var(--space-5) } ».
+   Dans la rangee d'en-tete, cette marge porte la boite de la marque a 55 px
+   face aux 32 px du bouton : « align-items: center » alignait alors deux
+   boites de hauteurs differentes, et le chevron tombait 12 px sous le mot
+   « Clinique ». L'ecart sous l'en-tete est porte par .sidebar-tete, jamais
+   par la marque elle-meme. */
+.app-sidebar .sidebar-tete .brand { margin-bottom: 0; }
 
 .online-indicator {
   display: inline-flex; align-items: center; gap: 6px;
@@ -275,10 +319,35 @@ button, .btn { font-family: var(--font-body); }
 }
 .app-sidebar .user-box .user-name { color: var(--ink); font-weight: 600; margin-bottom: 8px; }
 .app-sidebar .user-box button {
+  /* flex + gap : le libelle est maintenant dans un <span>, l'espace ne peut
+     plus venir d'un simple blanc entre l'icone et le texte. */
   width: 100%; padding: 7px; background: var(--surface-muted); border: none;
   border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; color: var(--ink-muted);
+  display: flex; align-items: center; justify-content: center; gap: var(--space-2);
 }
 .app-sidebar .user-box button:hover { background: var(--border); }
+
+/* ---- Barre laterale repliee ------------------------------------------
+   Reduite a un rail d'icones : les libelles disparaissent, chaque icone
+   garde son title comme infobulle. Les en-tetes de section (« Projets »,
+   « Administration ») et la liste des projets sont masques — une colonne de
+   pastilles de couleur identiques n'aide personne a retrouver un projet ;
+   on redeploie pour en choisir un. */
+body.menu-replie .app-sidebar { width: 64px; padding-left: 10px; padding-right: 10px; }
+body.menu-replie .app-sidebar .nav-label { display: none; }
+body.menu-replie .app-sidebar .sidebar-tete { flex-direction: column; gap: var(--space-2); }
+body.menu-replie .app-sidebar .brand { gap: 0; justify-content: center; }
+body.menu-replie .app-sidebar .nav-link,
+body.menu-replie .app-sidebar .user-box button { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
+body.menu-replie .app-sidebar .nav-section-label,
+body.menu-replie .app-sidebar .nav-section-toggle,
+body.menu-replie .app-sidebar #projects-list { display: none; }
+body.menu-replie .app-sidebar .user-box .user-name { display: none; }
+
+/* La largeur s'anime, pas le contenu : sur un telephone d'entree de gamme une
+   animation de contenu rame et retarde la lecture. */
+.app-sidebar { transition: width var(--transition-base) var(--courbe); }
+@media (prefers-reduced-motion: reduce) { .app-sidebar { transition: none; } }
 
 .app-main { flex: 1; min-width: 0; padding: 30px 40px 70px 40px; max-width: none; }
 
@@ -423,6 +492,15 @@ table.data-table tr:hover td { background: var(--surface-muted); }
   .app-shell { flex-direction: column; }
   .app-sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); }
   .app-main { padding: 20px; max-width: 100%; }
+  /* Sous ce seuil la barre est deja une bande horizontale pleine largeur :
+     la replier n'a plus de sens, et le bouton induirait en erreur. */
+  .app-sidebar .sidebar-toggle { display: none; }
+  body.menu-replie .app-sidebar { width: 100%; padding-left: 16px; padding-right: 16px; }
+  body.menu-replie .app-sidebar .nav-label,
+  body.menu-replie .app-sidebar .nav-section-label,
+  body.menu-replie .app-sidebar .nav-section-toggle,
+  body.menu-replie .app-sidebar #projects-list,
+  body.menu-replie .app-sidebar .user-box .user-name { display: revert; }
 }
 
 

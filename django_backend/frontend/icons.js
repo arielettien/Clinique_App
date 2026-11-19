@@ -20,6 +20,8 @@ const ICONS = {
   "triangle-alert": `<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" />`,
   "search": `<path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" />`,
   "filter": `<path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z" />`,
+  "chevron-left": `<path d="m15 18-6-6 6-6" />`,
+  "chevron-right": `<path d="m9 18 6-6-6-6" />`,
   "chevron-down": `<path d="m6 9 6 6 6-6" />`,
   "chevron-up": `<path d="m18 15-6-6-6 6" />`,
   "arrow-left": `<path d="m12 19-7-7 7-7" /> <path d="M19 12H5" />`,

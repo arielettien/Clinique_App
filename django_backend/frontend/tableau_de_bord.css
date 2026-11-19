@@ -9,19 +9,14 @@
    chargees depuis Google : un ecran consulte en reunion, parfois sans
    internet, doit garder sa typographie. */
 
-@font-face { font-family: 'Barlow'; font-weight: 400; font-style: normal; font-display: swap;
-  src: url('/fonts/barlow-latin-400-normal.woff2') format('woff2'); }
-@font-face { font-family: 'Barlow'; font-weight: 500; font-style: normal; font-display: swap;
-  src: url('/fonts/barlow-latin-500-normal.woff2') format('woff2'); }
-@font-face { font-family: 'Barlow'; font-weight: 600; font-style: normal; font-display: swap;
-  src: url('/fonts/barlow-latin-600-normal.woff2') format('woff2'); }
-@font-face { font-family: 'Barlow Condensed'; font-weight: 500; font-style: normal; font-display: swap;
-  src: url('/fonts/barlow-condensed-latin-500-normal.woff2') format('woff2'); }
-@font-face { font-family: 'Barlow Condensed'; font-weight: 600; font-style: normal; font-display: swap;
-  src: url('/fonts/barlow-condensed-latin-600-normal.woff2') format('woff2'); }
+/* Les @font-face Barlow sont desormais dans style.css, chargee avant celle-ci
+   sur toutes les pages : la typographie du tableau de bord est devenue celle
+   de toute l'application. Les redeclarer ici ferait double emploi. */
 
 body.dash {
-  --d-bg: #f2f2f3;
+  /* Fond blanc, comme le reste de l'application. Le gris #f2f2f3 d'origine
+     faisait changer la couleur de fond au seul passage sur cette page. */
+  --d-bg: #FFFFFF;
   --d-ink: #1d1f20;
   /* Gris neutre derive de l'encre (pas une couleur decorative) : reste
      lisible au soleil, comme --ink-muted dans style.css. */

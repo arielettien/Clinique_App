@@ -9,7 +9,8 @@ from rest_framework.response import Response
 
 from cases.models import Case
 from clinical_forms.models import Form
-from clinical_forms.services import check_referral_suggestion, find_referral_field_id
+from clinical_forms.services import (check_referral_suggestion, display_schema_of,
+                                     find_referral_field_id)
 from core.audit import log_audit
 from core.form_validation import validate_and_process_submission
 from patients.models import Patient
@@ -246,6 +247,10 @@ def patient_submissions(request, patient_id):
             # convention.
             "created_at": s.created_at,
             "field_types": field_types_of(form),
+            # Le formulaire lui-meme, pour que l'historique puisse afficher les
+            # libelles et l'ordre de saisie plutot que les cles brutes du JSON.
+            "form_id": s.form_id,
+            "field_schema": display_schema_of(form),
         })
     return Response(result)
 

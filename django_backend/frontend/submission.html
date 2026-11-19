@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nouvelle consultation — Clinique</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Plus aucune police chargee depuis Google : Barlow est hebergee dans
+     fonts/ et declaree dans style.css. L'application doit fonctionner
+     sans internet, typographie comprise. -->
 <link rel="stylesheet" href="/style.css">
 <style>
   h1 { font-size: 1.35rem; margin: 4px 0 4px 0; }
@@ -43,6 +43,18 @@
   .form-choice-list li { margin-bottom: 8px; }
   .form-choice-list a { display:block; }
   .post-submit-actions { display:flex; gap:10px; margin-top: 4px; }
+  /* Rangee « Annuler / Enregistrer » en bas du formulaire. L'action
+     principale reste a droite, la ou le pouce arrive sur telephone. */
+  .form-submit-actions {
+    display: flex; flex-wrap: wrap; gap: var(--space-3);
+    margin-top: var(--space-5);
+  }
+  /* Sur telephone, un agent remplit ce formulaire d'une main, souvent dehors :
+     les deux boutons passent pleine largeur plutot que de se tasser a gauche. */
+  @media (max-width: 480px) {
+    .form-submit-actions { flex-direction: column-reverse; }
+    .form-submit-actions .btn { width: 100%; }
+  }
   .patient-match-list { margin: -6px 0 14px 0; display:flex; flex-direction:column; gap:6px; }
   .patient-match-item {
     display:block; width:100%; text-align:left; box-sizing:border-box;
@@ -841,6 +853,10 @@ function renderForm(form) {
   const submitBtn = document.createElement('button');
   submitBtn.type = 'submit';
   submitBtn.id = 'submit-btn';
+  // Sans ces classes, le bouton retombait sur le style par defaut du
+  // navigateur (petit, gris, coins carres) alors que « Annuler » juste a cote
+  // etait deja style : l'action principale de l'ecran paraissait secondaire.
+  submitBtn.className = 'btn btn-primary';
   submitBtn.textContent = editSubmissionId
     ? 'Enregistrer les corrections'
     : (caseIdParam ? 'Enregistrer la visite' : (isSurveyMode ? 'Enregistrer l\'enquête' : 'Enregistrer la consultation'));
@@ -849,7 +865,6 @@ function renderForm(form) {
   cancelBtn.type = 'button';
   cancelBtn.id = 'cancel-btn';
   cancelBtn.className = 'btn btn-ghost';
-  cancelBtn.style.marginRight = '10px';
   cancelBtn.textContent = 'Annuler';
   cancelBtn.onclick = () => {
     const hasInput = Array.from(container.querySelectorAll('[data-field-id]')).some(el => {
@@ -860,8 +875,14 @@ function renderForm(form) {
     if (window.history.length > 1) window.history.back();
     else window.location.href = '/';
   };
-  container.appendChild(cancelBtn);
-  container.appendChild(submitBtn);
+  // Rangee d'actions de fin de formulaire : l'ecart entre les deux boutons et
+  // le detachement du dernier champ viennent de l'echelle d'espacement, plus
+  // d'une marge en dur posee sur un bouton.
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'form-submit-actions';
+  actionsRow.appendChild(cancelBtn);
+  actionsRow.appendChild(submitBtn);
+  container.appendChild(actionsRow);
 }
 
 async function loadForm(fid) {

@@ -286,12 +286,33 @@ async function initAppShell(activeProjectId) {
   const slot = document.getElementById('app-sidebar-slot');
   if (slot) {
     const ic = window.icon || (() => '');
+
+    // Le lien actif se deduit de l'ADRESSE COURANTE. Avant, seul « Tous les
+    // projets » recevait la classe « active », sur la seule condition
+    // « pas de projet selectionne » — or toutes les pages hors projet
+    // appellent initAppShell(null). Resultat : quel que soit l'onglet ouvert,
+    // le menu designait « Tous les projets ». Un menu qui montre en
+    // permanence une page ou l'on n'est pas ne sert plus a se reperer.
+    const cheminCourant = window.location.pathname.replace(/\/index\.html$/, '/') || '/';
+    const estPageCourante = (href) => href.split('?')[0] === cheminCourant;
+    // Le libelle est encapsule dans un <span class="nav-label"> : c'est lui
+    // qu'on masque quand la barre est repliee, pour ne garder que l'icone.
+    // Sans cet enrobage le texte serait un simple noeud de texte, que le CSS
+    // ne sait pas cibler. Le title reste la tooltip du mode replie.
+    const lienNav = (href, icone, libelle, actif) => {
+      const estActif = (actif === undefined) ? estPageCourante(href) : actif;
+      // aria-current : un lecteur d'ecran annonce « page courante » au lieu de
+      // laisser deviner ce que la couleur de fond signifie.
+      return `<a class="nav-link ${estActif ? 'active' : ''}"${estActif ? ' aria-current="page"' : ''}`
+           + ` href="${href}" title="${libelle}">${icone}<span class="nav-label">${libelle}</span></a>`;
+    };
+
     const projectLinks = projects.map(p => {
       const isActive = p.id === activeProjectId;
       return `
-        <a class="nav-link ${isActive ? 'active' : ''}" href="/project_hub.html?project_id=${p.id}">
+        <a class="nav-link ${isActive ? 'active' : ''}"${isActive ? ' aria-current="page"' : ''} href="/project_hub.html?project_id=${p.id}" title="${p.name}">
           <span class="project-dot" style="background:${projectColor(p.id)}"></span>
-          ${p.name}
+          <span class="nav-label">${p.name}</span>
         </a>`;
     }).join('');
 
@@ -305,13 +326,24 @@ async function initAppShell(activeProjectId) {
     // (voir renderTopBar plus bas) : c'est l'information qu'un agent consulte
     // le plus souvent sur le terrain, elle doit être au même endroit sur tous
     // les écrans et sans avoir à chercher dans la colonne de navigation.
+    // Etat replie relu avant le rendu : la barre s'affiche directement dans
+    // l'etat choisi la derniere fois, sans clignotement.
+    const replie = localStorage.getItem('sidebar_replie') === '1';
+    document.body.classList.toggle('menu-replie', replie);
+
     slot.innerHTML = `
-      <a class="brand" href="/">${ic('stethoscope')} Clinique</a>
+      <div class="sidebar-tete">
+        <a class="brand" href="/" title="Clinique">${ic('stethoscope')}<span class="nav-label">Clinique</span></a>
+        <button type="button" id="sidebar-toggle" class="sidebar-toggle"
+                aria-expanded="${replie ? 'false' : 'true'}" aria-controls="app-sidebar-slot"
+                title="${replie ? 'Déployer le menu' : 'Réduire le menu'}"
+                aria-label="${replie ? 'Déployer le menu' : 'Réduire le menu'}">${ic(replie ? 'chevron-right' : 'chevron-left')}</button>
+      </div>
       <nav>
-        <a class="nav-link ${!activeProjectId ? 'active' : ''}" href="/">${ic('folder')} Tous les projets</a>
-        <a class="nav-link" href="/patients.html">${ic('users')} Patients</a>
-        <a class="nav-link" href="/tableur.html">${ic('file-spreadsheet')} Tableur</a>
-        <a class="nav-link" href="/tableau_de_bord.html">${ic('layout-dashboard')} Tableau de bord</a>
+        ${lienNav('/', ic('folder'), 'Tous les projets', !activeProjectId && estPageCourante('/'))}
+        ${lienNav('/patients.html', ic('users'), 'Patients')}
+        ${lienNav('/tableur.html', ic('file-spreadsheet'), 'Tableur')}
+        ${lienNav('/tableau_de_bord.html', ic('layout-dashboard'), 'Tableau de bord')}
         <button type="button" id="projects-toggle" class="nav-section-toggle" aria-expanded="${projectsExpanded ? 'true' : 'false'}">
           <span>Projets</span>
           <span class="toggle-chevron">${ic(projectsExpanded ? 'chevron-up' : 'chevron-down')}</span>
@@ -321,13 +353,13 @@ async function initAppShell(activeProjectId) {
         </div>
         ${user.role === 'admin' ? `
         <div class="nav-section-label" style="margin-top:var(--space-4);">Administration</div>
-        <a class="nav-link" href="/users.html">${ic('user')} Gérer les utilisateurs</a>
-        <a class="nav-link" href="/audit_log.html">${ic('clock')} Journal d'activité</a>
+        ${lienNav('/users.html', ic('user'), 'Gérer les utilisateurs')}
+        ${lienNav('/audit_log.html', ic('clock'), "Journal d'activité")}
         ` : ''}
       </nav>
       <div class="user-box">
-        <div class="user-name">${user.full_name || user.email}</div>
-        <button id="shell-logout-btn" type="button">${ic('log-out')} Se déconnecter</button>
+        <div class="user-name nav-label">${user.full_name || user.email}</div>
+        <button id="shell-logout-btn" type="button" title="Se déconnecter">${ic('log-out')}<span class="nav-label">Se déconnecter</span></button>
       </div>
     `;
 
@@ -342,6 +374,22 @@ async function initAppShell(activeProjectId) {
       projectsToggleBtn.setAttribute('aria-expanded', String(willExpand));
       projectsToggleBtn.querySelector('.toggle-chevron').innerHTML = ic(willExpand ? 'chevron-up' : 'chevron-down');
       localStorage.setItem('sidebar_projects_expanded', willExpand ? '1' : '0');
+    });
+
+    // Repli de la barre laterale. L'etat est garde dans localStorage : un agent
+    // qui travaille sur un petit ecran replie une fois, pas a chaque page —
+    // chaque navigation recharge entierement cette barre, aucun etat JS ne
+    // survivrait d'une page a l'autre.
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    toggleBtn.addEventListener('click', () => {
+      const replieMaintenant = !document.body.classList.contains('menu-replie');
+      document.body.classList.toggle('menu-replie', replieMaintenant);
+      localStorage.setItem('sidebar_replie', replieMaintenant ? '1' : '0');
+      const libelle = replieMaintenant ? 'Déployer le menu' : 'Réduire le menu';
+      toggleBtn.setAttribute('aria-expanded', String(!replieMaintenant));
+      toggleBtn.setAttribute('title', libelle);
+      toggleBtn.setAttribute('aria-label', libelle);
+      toggleBtn.innerHTML = ic(replieMaintenant ? 'chevron-right' : 'chevron-left');
     });
 
     document.getElementById('shell-logout-btn').addEventListener('click', async () => {
